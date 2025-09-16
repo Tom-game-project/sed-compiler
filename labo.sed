@@ -1,8 +1,6 @@
 # hello world
 
 # 関数の呼び出し
-s/.*/:done|/
-H
 s/.*/:retlabel0-ba|/
 H
 b sub_routine0
@@ -26,29 +24,27 @@ s/\(.*\)-\(.*\)|$/\2/
 }
 
 # 関数の呼び出し
-s/\(.*\)/:retlabel0-\1|/
+s/\(.*\)/:retlabel1-\1|/
 H
 b sub_routine0
-:retlabel0
-
+:retlabel1
 b return_dispatcher
 # --- ここまでが関数の内容 ---
 
 :return_dispatcher
-# pop
-# x                        
-# h
-# s/\(.*\)\n\(.*\)|$/\2/  
-# x
 x
 # 4. 保存しておいた戻り先アドレスにジャンプする
-/\n:retlabel0.*|$/ {
+/\n:retlabel0[^\|]*|$/ {
 	s/\(.*\)\n\(.*\)|$/\1/
 	x
 	b retlabel0 
 }
-#/^:retlabel1$/ b 
-/\n:done.*|$/ {
+/\n:retlabel1[^\|]*|$/ {
+	s/\(.*\)\n\(.*\)|$/\1/
+	x
+	b retlabel1 
+}
+/\n:done[^\|]*|$/ {
 	b done
 }
 
