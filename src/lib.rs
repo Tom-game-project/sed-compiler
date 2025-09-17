@@ -1,5 +1,5 @@
-pub mod ast;
-pub use ast::build_ast_test;
+pub mod code_gen;
+pub use code_gen::build_ast_test;
 
 pub fn add(left: u64, right: u64) -> u64 {
     left + right
