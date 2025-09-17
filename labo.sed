@@ -1,4 +1,4 @@
-# hello world
+# recursive banana maker
 
 # 関数の呼び出し
 s/.*/:retlabel0-ba|/
@@ -11,16 +11,16 @@ b done
 :sub_routine0
 # 引数を取り出す
 g
-s/\(.*\)-\(.*\)|$/\2/
 
+s/\(.*\)-\(.*\)|$/\2/
 /^banana$/ {
-	b return_dispatcher
+	b return_dispatcher 
 }
 /^bana$/ {
-	s/^bana$/banana/
+	s/^bana$/banana/ 
 }
 /^ba$/ {
-	s/^ba$/bana/
+	 s/^ba$/bana/ 
 }
 
 # 関数の呼び出し
@@ -35,11 +35,13 @@ b return_dispatcher
 x
 # 4. 保存しておいた戻り先アドレスにジャンプする
 /\n:retlabel0[^\|]*|$/ {
+	# pop
 	s/\(.*\)\n\(.*\)|$/\1/
 	x
 	b retlabel0 
 }
 /\n:retlabel1[^\|]*|$/ {
+	# pop
 	s/\(.*\)\n\(.*\)|$/\1/
 	x
 	b retlabel1 
