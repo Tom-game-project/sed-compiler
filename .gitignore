@@ -1,4 +1,6 @@
 /target
+# file
+in.txt
 # vim 
 *.swo
 *.swp

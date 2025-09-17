@@ -8,6 +8,9 @@ pub fn add(left: u64, right: u64) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::File;
+    use std::io::Write;
+
 
     #[test]
     fn it_works00() {
@@ -17,6 +20,8 @@ mod tests {
 
     #[test]
     fn it_works01() {
-        build_ast_test();
+        let mut file = File::create("./labo2.sed").expect("ファイルが開けませんでした");  
+        let a = build_ast_test();
+        file.write_all(a.as_bytes()).expect("書き込みに失敗しました");
     }
 }

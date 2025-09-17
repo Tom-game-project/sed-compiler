@@ -70,14 +70,16 @@ struct CallFunc {
     // 何を呼ぶか
     // return addr
     func_name: String,
+    arg_pattern: String,
     arg_string:String,
     return_addr_marker: ReturnAddrMarker
 }
 
 impl CallFunc {
-    fn new(func_name: &str, arg_string: &str) -> Self{   
+    fn new(func_name: &str, arg_pattern: &str, arg_string: &str) -> Self{   
         Self { 
             func_name:func_name.to_string(),
+            arg_pattern: arg_pattern.to_string(),
             arg_string:arg_string.to_string(),
             return_addr_marker: ReturnAddrMarker(0)
         }
@@ -112,20 +114,22 @@ x
 }
 
 fn sedgen_func_call(func_call :&CallFunc, func_table:&[AstFunc]) -> Option<String> {
-    let func_find = func_table.iter().find(|f|f.name == func_call.func_name)?;
-
+    let func_def = func_table.iter().find(|f|f.name == func_call.func_name)?;
+// この正規表現の部分をうまくやれば引数を渡せる
+// s/.*/:retlabel{}{}|/
     Some(
         format!("
 # {}関数の呼び出し
-s/.*/:retlabel{}{}|/
+s/{}/:retlabel{}{}|/
 H
 b func{}
 :retlabel{}
 ",
         func_call.func_name,
+        func_call.arg_pattern,
         func_call.return_addr_marker.0,
         func_call.arg_string,
-        func_find.id ,
+        func_def.id ,
         func_call.return_addr_marker.0        
         )
     )
@@ -183,7 +187,8 @@ pub fn sedgen_func_table(func_table:&[AstFunc]) -> Result<String, CompileErr>
 }
 
 /// return addrの決定
-/// 関数の
+/// 関数を集めて、return アドレス(ラベル)を解決する
+/// また、関数のラベルも解決する
 fn assemble_funcs(func_table:&mut [AstFunc]){
     //let mut func_table = vec![func_a, func_b];
     // return addrの決定
@@ -197,31 +202,31 @@ fn assemble_funcs(func_table:&mut [AstFunc]){
     }
 }
 
-pub fn build_ast_test() {
+pub fn build_ast_test() -> String{
     let mut entry = AstFunc::new("entry".to_string());
     let mut func_a = AstFunc::new("func_a".to_string());
     let mut func_b = AstFunc::new("func_b".to_string());
 
     entry.set_proc_contents(
         vec![
+            SedInstruction::Sed(SedCode("s/.*/hello/".to_string())),
             SedInstruction::Call(
-                CallFunc::new("func_a", "-arg1")),
-            SedInstruction::Call(
-                CallFunc::new("func_b", "-arg1-arg2")),
+                CallFunc::new("func_a", "\\(.*\\)", "-\\1")),
         ]
     );
     // 関数の内容を定義する
     func_a.set_proc_contents(
         vec![
-            SedInstruction::Sed(SedCode("s/.*/helloworld/".to_string())),
+            SedInstruction::Sed(SedCode("g".to_string())),
+            SedInstruction::Sed(SedCode("s/:retlabel[0-9]\\+-\\([^\\-]*\\)|$/\\1/".to_string())),
             SedInstruction::Call(
-                CallFunc::new("func_b", "-arg1-arg2"))
+                CallFunc::new("func_b", "\\n\\(.*\\)", "-\\1-\\1")),
         ]
     );
 
     func_b.set_proc_contents(
         vec![
-            SedInstruction::Sed(SedCode("s/.*/helloworld/".to_string())),
+            SedInstruction::Sed(SedCode("s/:retlabel[0-9]\\+-\\([^\\-]*\\)-\\([^\\-]*\\)|$/\\1===\\2/".to_string())),
             //SedInstruction::Call(CallFunc::new("func_a","-arg1"))
         ]
     );
@@ -230,10 +235,12 @@ pub fn build_ast_test() {
     assemble_funcs(&mut func_table);
     if let Ok(code) = sedgen_func_table(&func_table) {
         println!("{}", code);
+        code
     }
     else
     {
         println!("Compile err occured");
+        "".to_string()
     }
 
 }
