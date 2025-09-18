@@ -1,37 +1,27 @@
-s/.*/hello/
+s/.*/~hello~world/
 
 # func_a関数の呼び出し
-s/\(.*\)/:retlabel0-\1|/
+s/~\([^~]*\)~\([^~]*\)/:retlabel0-\1~\1~\2|/
 H
 b func1
 :retlabel0
 b done
 :func1
 g
-s/:retlabel[0-9]\+-\([^\-]*\)|$/\1/
-
-# func_b関数の呼び出し
-s/\n\(.*\)/:retlabel1-\1-\1|/
-H
-b func2
-:retlabel1
-b return_dispatcher
-:func2
-s/:retlabel[0-9]\+-\([^\-]*\)-\([^\-]*\)|$/\1===\2/
+s/:retlabel[0-9]\+-\([^\-~]*\)[^\|]*|$/~\1/
+s/\n~\(.*\)/\1funca;/
+# ";"をいれてreturn
 b return_dispatcher
 
 :return_dispatcher
+H
 x
 
-/\n:retlabel0[^\|]*|$/ {
-	s/\(.*\)\n\(.*\)|$/\1/
+/\n:retlabel0-[^\|]*|[^\;]*;$/ {
+	h
+	s/\(.*\)\n:retlabel0-\([^\|]*\)|\n[^\;]*;$/\1/
 	x
+	s/.*\n:retlabel0-[^\-~|]*~\([^\~|]*\)~\([^\~|]*\)|\n\([^\;]*\);$/\1 \2 \3/
 	b retlabel0
-}
-
-/\n:retlabel1[^\|]*|$/ {
-	s/\(.*\)\n\(.*\)|$/\1/
-	x
-	b retlabel1
 }
 :done
