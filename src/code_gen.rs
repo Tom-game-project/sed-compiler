@@ -8,24 +8,78 @@ impl ReturnAddrMarker {
 
 struct SedCode(String);
 
-enum SedInstruction{
+enum SedInstruction <'a>{
+    /// 生のSedプログラム
     Sed(SedCode),
-    Call(CallFunc),
+    /// スタックに引数を積む
+    ArgVal(&'a ArgVal),
+    /// スタックにローカル引数を積む
+    LocalVal(&'a LocalVal),
+    /// スタックに定数を積む
+    ConstVal(ConstVal),
+    /// 関数をよびスタックを関数の引数分消費して
+    /// 返り値をスタックに積む
+    Call(CallFunc), // calling function
+    Ret(&'a[&'a StackVal<'a>]) // return 
 }
 
-pub struct AstFunc{
+/// |... ArgVal ...|... LocalVal...|
+///  <---------fixed size -------->
+/// 返り値
+enum StackVal <'a>{
+    ArgVal(&'a ArgVal),
+    LocalVal(&'a LocalVal)
+}
+
+struct ArgVal {
+    id: usize // 引数の識別、同一スコープ内で重複がないように設定する
+}
+
+impl ArgVal {
+    fn new(id: usize) -> Self{
+        Self { id }
+    }
+}
+
+struct LocalVal {
+    id: usize // 引数の識別、同一スコープ内で重複がないように設定する
+}
+impl LocalVal {
+    fn new(id: usize) -> Self {
+        Self {
+            id
+        }
+    }
+}
+
+struct ConstVal {
+    data: String
+}
+impl ConstVal {
+    fn new(data: &str) -> Self {
+        Self { data: data.to_string() }
+    }
+}
+
+pub struct AstFunc <'a>{
     name: String, // 
     id: usize,
+    argc: usize,  // 引数の個数
+    localc: usize,// ローカル変数の個数
+    retc: usize,
     return_addr_offset: ReturnAddrMarker,
-    proc_contents: Vec<SedInstruction>
+    proc_contents: Vec<SedInstruction<'a>>
 } 
 // いくつFunction callがあるか数える関数
 
-impl AstFunc{
-    fn new(name:String) -> Self{
+impl <'a>AstFunc <'a>{
+    fn new(name:String, argc: usize, localc: usize, retc: usize) -> Self{
         AstFunc {
             name: name,
             id: 0,
+            argc,
+            localc,
+            retc,
             return_addr_offset: ReturnAddrMarker(0),
             proc_contents: vec![]
         }
@@ -40,7 +94,7 @@ impl AstFunc{
     }
 
     /// 関数の内容がセットされ、更に,callにはreturn_addr_markerが0から1ずつインクリメントして設定される
-    fn set_proc_contents(&mut self, proc_contents: Vec<SedInstruction>) {
+    fn set_proc_contents(&mut self, proc_contents: Vec<SedInstruction<'a>>) {
         self.proc_contents = proc_contents;
 
         let mut counter = 0;
@@ -70,17 +124,16 @@ struct CallFunc {
     // 何を呼ぶか
     // return addr
     func_name: String,
-    arg_pattern: String,
-    arg_string:String,
+    /// 呼び出しもとのローカル変数の個数
+    localc: usize,
     return_addr_marker: ReturnAddrMarker
 }
 
 impl CallFunc {
-    fn new(func_name: &str, arg_pattern: &str, arg_string: &str) -> Self{   
+    fn new(func_name: &str, localc: usize) -> Self{   
         Self { 
             func_name:func_name.to_string(),
-            arg_pattern: arg_pattern.to_string(),
-            arg_string:arg_string.to_string(),
+            localc,
             return_addr_marker: ReturnAddrMarker(0)
         }
     }
@@ -113,10 +166,111 @@ x
     rstr
 }
 
-fn sedgen_func_call(func_call :&CallFunc, func_table:&[AstFunc]) -> Option<String> {
-    let func_def = func_table.iter().find(|f|f.name == func_call.func_name)?;
-// この正規表現の部分をうまくやれば引数を渡せる
-// s/.*/:retlabel{}{}|/
+fn find_function_definition_by_name<'a>(name: &str, func_table:&'a [AstFunc]) -> Option<&'a AstFunc<'a>>
+{
+        func_table
+            .iter()
+            .find(|f|f.name == name.to_string())
+}
+
+fn sedgen_return_dispatcher2_helper(
+    call_func: &CallFunc,
+    func_table:&[AstFunc]
+) -> String
+{
+    let func_def = find_function_definition_by_name(&call_func.func_name, func_table)
+        .expect("関数が存在しません");
+    let mut rstr = "".to_string();
+    let retlabel = format!("retlabel{}", 
+        call_func.return_addr_marker.0
+    );
+
+    rstr.push_str(&format!("/\\n:{}[^\\|]*|[^\\;]*;$/ {{\n", retlabel));
+    rstr.push_str("h\n");
+    rstr.push_str(&format!("s/\\(.*\\)\\n:{}\\([^\\|]*\\)|\\n[^\\;]*;$/\\1/\n", retlabel));
+    rstr.push_str("x\n");
+    // s/.../.../形式のマッチ文開始
+    {
+        // pattern
+        rstr.push_str(&format!("s/.*\\n:{}",retlabel));
+        rstr.push_str(&"~[^\\~|]*".repeat(func_def.argc));
+        rstr.push_str(&"~\\([^\\~|]*\\)".repeat(
+                call_func.localc // 呼び出しもとのローカル変数の個数
+        ));
+        rstr.push_str("|\\n");
+        rstr.push_str(&"~\\([^\\~;]*\\)".repeat(func_def.retc));
+        rstr.push_str(";$/");
+        // TODO:
+        rstr.push_str(
+            &(0..
+                call_func.localc // 呼び出しもとのローカル変数の個数
+                + func_def.retc  // 返り値の個数
+            )
+            .map(|i| format!("~\\{}", i + 1))
+            .collect::<Vec<String>>()
+            .join(""));
+        rstr.push_str("/\n");
+    }
+    rstr.push_str(&format!("b {}\n",retlabel));
+    rstr.push_str("}\n");
+    rstr
+}
+
+/// ローカル変数を返せる
+fn sedgen_return_dispatcher2(func_table: &[AstFunc]) -> String
+{
+    let mut rstr = "
+:return_dispatcher
+H
+x
+".to_string();
+    for i in func_table {
+        for j in &i.proc_contents {
+            if let SedInstruction::Call(f) = j {
+                rstr.push_str(&sedgen_return_dispatcher2_helper(
+                        f, 
+                        func_table
+                ));
+            }
+        }
+    }
+    rstr
+}
+
+fn sedgen_func_call(
+    func_def :&AstFunc,
+    return_addr_marker: &ReturnAddrMarker,
+    stack_size:usize,
+) -> Option<String> {
+    // 呼び出している場所のスタックの状態はコンパイル時に判明するため TODO
+    //let func_def = 
+    //    func_table
+    //    .iter()
+    //    .find(|f|f.name == func_call.func_name)?; 
+    // この正規表現の部分をうまくやれば引数を渡せる
+    // s/.*/:retlabel{}{}|/
+    let arg_pattern: String = 
+        "~\\([^\\~]*\\)".repeat(stack_size);
+    let arg_string: String = format!("{}{}",
+            (0..func_def.argc)
+                .map(|i| format!("~\\{}", 
+                        stack_size 
+                        - func_def.argc // argの始まりに合わせる 
+                        + i 
+                        + 1 // indexは1スタート
+                ))
+                .collect::<Vec<String>>()
+                .join(""),
+            (0..stack_size - func_def.argc) // 引数は消費され
+                                            // スタックからpopされる
+                .map(|i| format!("~\\{}", 
+                        i
+                        + 1 // indexは1スタート
+                ))
+                .collect::<Vec<String>>()
+                .join(""),
+        );
+        //format!("-\\{}");
     Some(
         format!("
 # {}関数の呼び出し
@@ -125,12 +279,12 @@ H
 b func{}
 :retlabel{}
 ",
-        func_call.func_name,
-        func_call.arg_pattern,
-        func_call.return_addr_marker.0,
-        func_call.arg_string,
+        func_def.name,
+        arg_pattern,
+        return_addr_marker.0,
+        arg_string,
         func_def.id ,
-        func_call.return_addr_marker.0        
+        return_addr_marker.0        
         )
     )
 }
@@ -141,6 +295,11 @@ pub enum CompileErr {
 
 fn sedgen_func_def(func_def: &AstFunc, func_table:&[AstFunc]) -> Result<String, CompileErr> {
     let is_entry = func_def.name == "entry";
+
+    let arg_vals_len = func_def.argc;
+    let local_vals_len = func_def.localc;
+    let fixed_offset = arg_vals_len + local_vals_len;
+    let mut stack_size = fixed_offset;
     
     let mut rstr = 
         if is_entry {
@@ -153,14 +312,73 @@ fn sedgen_func_def(func_def: &AstFunc, func_table:&[AstFunc]) -> Result<String, 
     for i in &func_def.proc_contents {
         if let SedInstruction::Sed(sed) = i {
             rstr.push_str(&format!("{}\n", sed.0));
-        }else if let SedInstruction::Call(call) = i {
-            if let Some(code) = sedgen_func_call(call, func_table) {
+        }else if let SedInstruction::Call(func_call) = i {
+            // 関数の定義を見つけ出し関数の呼び方を決定する
+            let func_def = find_function_definition_by_name(
+                &func_call.func_name,
+                func_table
+                ).expect("定義されていない関数");
+            if let Some(code) = sedgen_func_call(
+                func_def,
+                &func_call.return_addr_marker,
+                stack_size,
+            )
+            {
                 rstr.push_str(&code);
+                stack_size -= func_def.argc;
+                stack_size += func_def.retc;
             }
             else
             {
                 return Err(CompileErr::UndefinedFunction)
             }
+        } else if let SedInstruction::ArgVal(a) = i {
+                let mut next_pattern = 
+                    (1..stack_size + 1)
+                        .map(|d| format!("~\\{}", d))
+                        .collect::<Vec<String>>();
+                next_pattern.push(format!("~\\{}", 
+                        a.id 
+                        + 1 // index が1から始まる
+                )); // スタックに引数を積む
+                rstr.push_str(&format!("s/{}/{}/\n",
+                    "~\\([^\\~]*\\)".repeat(stack_size),
+                    next_pattern.join("")
+                )
+                );
+                stack_size += 1;
+        } else if let SedInstruction::LocalVal(a) = i {
+                let mut next_pattern = 
+                    (1..stack_size + 1)
+                        .map(|d| format!("~\\{}", d))
+                        .collect::<Vec<String>>();
+                next_pattern.push(format!("~\\{}",
+                        a.id 
+                        + 1 // index が1から始まる
+                        + arg_vals_len // 引数分のoffset
+                )); // スタックにローカル変数を:world積む
+                rstr.push_str(&format!("s/{}/{}/\n",
+                    "~\\([^\\~]*\\)".repeat(stack_size),
+                    next_pattern.join("")
+                ));
+                stack_size += 1;
+        } else if let SedInstruction::ConstVal(a) = i {
+                let mut next_pattern = 
+                (1..stack_size + 1)
+                    .map(|d| format!("~\\{}", d))
+                    .collect::<Vec<String>>();
+                next_pattern.push(format!("~{}",
+                        a.data
+                )); // 定数をスタックに積む
+                rstr.push_str(&format!("s/{}/{}/\n",
+                    "~\\([^\\~]*\\)".repeat(stack_size),
+                    next_pattern.join("")
+                ));
+                stack_size += 1;
+        } else if let SedInstruction::Ret(a) = i {
+            //match  {
+            //    
+            //}
         }
     }
 
@@ -181,7 +399,7 @@ pub fn sedgen_func_table(func_table:&[AstFunc]) -> Result<String, CompileErr>
         let code = sedgen_func_def(i, func_table)?;
         rstr.push_str(&code);
     }
-    rstr.push_str(&sedgen_return_dispatcher(func_table));
+    rstr.push_str(&sedgen_return_dispatcher2(func_table));
     rstr.push_str(":done");
     Ok(rstr)
 }
@@ -202,36 +420,43 @@ fn assemble_funcs(func_table:&mut [AstFunc]){
     }
 }
 
-pub fn build_ast_test() -> String{
-    let mut entry = AstFunc::new("entry".to_string());
-    let mut func_a = AstFunc::new("func_a".to_string());
-    let mut func_b = AstFunc::new("func_b".to_string());
+pub fn build_ast_test02() -> String{
+    // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
+    let mut entry = AstFunc::new("entry".to_string(), 0, 2, 1);
+    let mut func_pow = AstFunc::new("pow".to_string(), 2, 1, 1); 
+    let mut func_add = AstFunc::new("add".to_string(), 2, 1, 1);
+
+    let arg_vals: Vec<ArgVal> = vec![]; // entryの引数
+    let local_vals = vec![
+        LocalVal::new(0), // L0
+        LocalVal::new(1), // L1
+    ]; // entryのローカル変数
 
     entry.set_proc_contents(
         vec![
-            SedInstruction::Sed(SedCode("s/.*/hello/".to_string())),
-            SedInstruction::Call(
-                CallFunc::new("func_a", "\\(.*\\)", "-\\1")),
+            SedInstruction::LocalVal(&local_vals[0]), // L0
+            SedInstruction::ConstVal(ConstVal::new("2")),
+            SedInstruction::Call(CallFunc::new("pow", 2)),
+            SedInstruction::LocalVal(&local_vals[1]), // L1
+            SedInstruction::ConstVal(ConstVal::new("2")),
+            SedInstruction::Call(CallFunc::new("pow", 2)),
+            SedInstruction::Call(CallFunc::new("add", 2)),
         ]
     );
+
     // 関数の内容を定義する
-    func_a.set_proc_contents(
+    func_pow.set_proc_contents(
         vec![
-            SedInstruction::Sed(SedCode("g".to_string())),
-            SedInstruction::Sed(SedCode("s/:retlabel[0-9]\\+-\\([^\\-]*\\)|$/\\1/".to_string())),
-            SedInstruction::Call(
-                CallFunc::new("func_b", "\\n\\(.*\\)", "-\\1-\\1")),
+            SedInstruction::Sed(SedCode("# 関数の例".to_string())),
+            SedInstruction::Sed(SedCode("s/:retlabel[0-9]\\+-\\([^\\-~]*\\)[^\\|]*|$/~\\1/".to_string())),
+
+            SedInstruction::Sed(SedCode("s/\\n~\\(.*\\)/\\1funca/".to_string())),
+            //SedInstruction::Call(
+            //    CallFunc::new("func_b", "\\n\\(.*\\)", "-\\1-\\1")),
         ]
     );
 
-    func_b.set_proc_contents(
-        vec![
-            SedInstruction::Sed(SedCode("s/:retlabel[0-9]\\+-\\([^\\-]*\\)-\\([^\\-]*\\)|$/\\1===\\2/".to_string())),
-            //SedInstruction::Call(CallFunc::new("func_a","-arg1"))
-        ]
-    );
-
-    let mut func_table = vec![entry, func_a, func_b];
+    let mut func_table = vec![entry, func_pow];
     assemble_funcs(&mut func_table);
     if let Ok(code) = sedgen_func_table(&func_table) {
         println!("{}", code);
@@ -245,4 +470,67 @@ pub fn build_ast_test() -> String{
 
 }
 
+
+/// let l0 = hello;
+/// let l1 = Tom;
+/// add("hello", add("world", "Tom"))
+/// ---
+/// local.get l0
+/// const "world"
+/// local.get l1
+/// add
+/// add
+/// 
+pub fn build_ast_test03() -> String
+{
+    // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
+    let mut entry = AstFunc::new("entry".to_string(), 0, 2, 1);
+    let mut func_add = AstFunc::new("add".to_string(), 2, 1, 1);
+
+    let entry_arg_vals: Vec<ArgVal> = vec![]; // entryの引数
+    let entry_local_vals = vec![
+        LocalVal::new(0), // L0
+        LocalVal::new(1), // L1
+    ]; // entryのローカル変数
+
+    entry.set_proc_contents(
+        vec![
+            SedInstruction::LocalVal(&entry_local_vals[0]), // L0
+            SedInstruction::ConstVal(ConstVal::new("world")),
+            SedInstruction::LocalVal(&entry_local_vals[1]), // L1
+            SedInstruction::Call(CallFunc::new("add", 2)),
+            SedInstruction::Call(CallFunc::new("add", 2)),
+        ]
+    );
+
+    let func_add_arg_vals: Vec<ArgVal> = vec![
+        ArgVal::new(0),
+        ArgVal::new(1),
+    ]; // entryの引数
+
+    let func_add_local_vals:Vec<LocalVal> = vec![];
+    // 関数の内容を定義する
+
+    func_add.set_proc_contents(
+        vec![
+            SedInstruction::Sed(SedCode("# 関数の例".to_string())),
+            SedInstruction::Sed(SedCode("g".to_string())),
+            SedInstruction::Sed(SedCode("s/:retlabel[0-9]\\+~\\([^\\-~]*\\)~\\([^\\-~]*\\).*|$/~\\1\\2;/".to_string())),
+            //SedInstruction::Call(
+            //    CallFunc::new("func_b", "\\n\\(.*\\)", "-\\1-\\1")),
+        ]
+    );
+
+    let mut func_table = vec![entry, func_add];
+    assemble_funcs(&mut func_table);
+    if let Ok(code) = sedgen_func_table(&func_table) {
+        println!("{}", code);
+        code
+    }
+    else
+    {
+        println!("Compile err occured");
+        "".to_string()
+    }
+}
 
