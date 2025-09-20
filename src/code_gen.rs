@@ -193,9 +193,12 @@ fn sedgen_return_dispatcher2_helper(
     {
         // pattern
         rstr.push_str(&format!("s/.*\\n:{}",retlabel));
-        rstr.push_str(&"~[^\\~|]*".repeat(func_def.argc));
-        rstr.push_str(&"~\\([^\\~|]*\\)".repeat(
-                call_func.localc // 呼び出しもとのローカル変数の個数
+        rstr.push_str(&"~[^\\~]*".repeat(func_def.argc));
+        rstr.push_str(&"~\\([^\\~]*\\)".repeat(
+                call_func.localc - 1 // 呼び出しもとのローカル変数の個数
+        ));
+        rstr.push_str(&"~\\([^\\|]*\\)".repeat(
+                1 // 呼び出しもとのローカル変数の個数
         ));
         rstr.push_str("|\\n");
         rstr.push_str(&"~\\([^\\~;]*\\)".repeat(func_def.retc));
@@ -495,6 +498,7 @@ pub fn build_ast_test03() -> String
 
     entry.set_proc_contents(
         vec![
+            SedInstruction::Sed(SedCode("s/.*/~hello~Tom/".to_string())),
             SedInstruction::LocalVal(&entry_local_vals[0]), // L0
             SedInstruction::ConstVal(ConstVal::new("world")),
             SedInstruction::LocalVal(&entry_local_vals[1]), // L1
@@ -515,7 +519,8 @@ pub fn build_ast_test03() -> String
         vec![
             SedInstruction::Sed(SedCode("# 関数の例".to_string())),
             SedInstruction::Sed(SedCode("g".to_string())),
-            SedInstruction::Sed(SedCode("s/:retlabel[0-9]\\+~\\([^\\-~]*\\)~\\([^\\-~]*\\).*|$/~\\1\\2;/".to_string())),
+            SedInstruction::Sed(SedCode("s/:retlabel[0-9]\\+~\\([^\\~]*\\)~\\([^\\~]*\\).*|$/~\\1\\2;/".to_string())),
+            SedInstruction::Sed(SedCode("s/\\n\\(.*\\)/\\1/".to_string())),
             //SedInstruction::Call(
             //    CallFunc::new("func_b", "\\n\\(.*\\)", "-\\1-\\1")),
         ]

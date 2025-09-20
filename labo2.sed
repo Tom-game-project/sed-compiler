@@ -12,8 +12,8 @@ b done
 g
 s/:retlabel[0-9]\+~\([^\~]*\)[^\|]*|$/~\1/
 
-# 返り値の設定は非常に重要
-s/\n\(.*\)/\1string~newstring;/
+# TODO 返り値の設定形式は非常に重要
+s/\n~\(.*\)/~\1string~\1newstring;/
 # ";"をいれてreturn
 b return_dispatcher
 
