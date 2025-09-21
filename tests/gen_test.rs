@@ -187,7 +187,7 @@ pub fn add(left: u64, right: u64) -> u64 {
 }
 
 #[cfg(test)]
-mod tests {
+mod gen_test {
     use super::*;
     use std::fs::File;
     use std::io::Write;
