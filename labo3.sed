@@ -16,10 +16,11 @@ b func1
 :retlabel1
 b done
 :func1
-# 関数の例
+
 g
-s/:retlabel[0-9]\+~\([^\~]*\)~\([^\~]*\).*|$/~\1\2;/
+s/:retlabel[0-9]\+~\([^\~]*\)~\([^\~]*\)[^\|]*|$/~\1~\2;/
 s/\n\(.*\)/\1/
+s/~\([^\~]*\)~\([^\~]*\)/~\1\2/;
 b return_dispatcher
 
 :return_dispatcher

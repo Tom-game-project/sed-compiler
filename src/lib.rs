@@ -1,7 +1,10 @@
 pub mod code_gen;
 pub mod val_resolver;
 
-pub use code_gen::{build_ast_test02, build_ast_test03};
+pub use code_gen::{
+    build_ast_test02, 
+    build_ast_test03, 
+    build_ast_test04};
 pub use val_resolver::*;
 
 
@@ -24,7 +27,7 @@ mod tests {
 
     #[test]
     fn it_works01() {
-        let mut file = File::create("./labo3.sed")
+        let mut file = File::create("./labo6.sed")
             .expect("ファイルが開けませんでした");  
         let a = build_ast_test02();
         file.write_all(a.as_bytes())
@@ -33,9 +36,18 @@ mod tests {
 
     #[test]
     fn it_works02() {
-        let mut file = File::create("./labo3.sed")
+        let mut file = File::create("./labo6.sed")
             .expect("ファイルが開けませんでした");  
         let a = build_ast_test03();
+        file.write_all(a.as_bytes())
+            .expect("書き込みに失敗しました");
+    }
+
+    #[test]
+    fn it_works03() {
+        let mut file = File::create("./labo6.sed")
+            .expect("ファイルが開けませんでした");  
+        let a = build_ast_test04();
         file.write_all(a.as_bytes())
             .expect("書き込みに失敗しました");
     }
