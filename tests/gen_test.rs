@@ -201,7 +201,7 @@ mod gen_test {
 
     #[test]
     fn it_works01() {
-        let mut file = File::create("./labo6.sed")
+        let mut file = File::create("./sed/labo6.sed")
             .expect("ファイルが開けませんでした");  
         let a = build_ast_test02();
         file.write_all(a.as_bytes())
@@ -210,7 +210,7 @@ mod gen_test {
 
     #[test]
     fn it_works02() {
-        let mut file = File::create("./labo6.sed")
+        let mut file = File::create("./sed/labo6.sed")
             .expect("ファイルが開けませんでした");  
         let a = build_ast_test03();
         file.write_all(a.as_bytes())
@@ -219,7 +219,7 @@ mod gen_test {
 
     #[test]
     fn it_works03() {
-        let mut file = File::create("./labo6.sed")
+        let mut file = File::create("./sed/labo6.sed")
             .expect("ファイルが開けませんでした");  
         let a = build_ast_test04();
         file.write_all(a.as_bytes())

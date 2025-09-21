@@ -154,10 +154,14 @@ fn find_function_definition_by_name<'a>(name: &str, func_table:&'a [FuncDef]) ->
 fn sedgen_return_dispatcher_helper(
     call_func: &CallFunc,
     func_table:&[FuncDef]
-) -> String
+) -> Result<String, CompileErr>
 {
-    let func_def = find_function_definition_by_name(&call_func.func_name, func_table)
-        .expect("関数が存在しません");
+    let func_def = 
+        if let Some(a) = find_function_definition_by_name(&call_func.func_name, func_table) {
+        a
+    } else {
+        return Err(CompileErr::UndefinedFunction);
+    };
     let mut rstr = "".to_string();
     let retlabel = format!("retlabel{}", 
         call_func.return_addr_marker.0
@@ -172,15 +176,14 @@ fn sedgen_return_dispatcher_helper(
         rstr.push_str(&"~\\([^\\~]*\\)".repeat( // <--+
                 call_func.localc - 1                    //    |
         ));                                             //    |-[呼び出し元のローカル変数の個数]
-                                                        //    | TODO: 
-        rstr.push_str(&"~\\([^\\|]*\\)".repeat( //    | call_func.localcはCallFuncによって
-                                                        //    | 適切に管理される必要がある
+                                                        //    |
+        rstr.push_str(&"~\\([^\\|]*\\)".repeat( //    |
+                                                        //    |
                 1                                       //    |
         ));                                             // <--+
         rstr.push_str("|\\n");
         rstr.push_str(&"~\\([^\\~;]*\\)".repeat(func_def.retc));
         rstr.push_str(";$/");
-        // TODO:
         rstr.push_str(
             &(0..
                 call_func.localc // 呼び出しもとのローカル変数の個数
@@ -193,11 +196,11 @@ fn sedgen_return_dispatcher_helper(
     }
     rstr.push_str(&format!("b {}\n",retlabel));
     rstr.push_str("}\n");
-    rstr
+    Ok(rstr)
 }
 
 /// ローカル変数を返せる
-fn sedgen_return_dispatcher(func_table: &[FuncDef]) -> String
+fn sedgen_return_dispatcher(func_table: &[FuncDef]) -> Result<String, CompileErr>
 {
     let mut rstr = "
 :return_dispatcher
@@ -211,14 +214,15 @@ s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\2/
     for i in func_table {
         for j in &i.proc_contents {
             if let SedInstruction::Call(f) = j {
-                rstr.push_str(&sedgen_return_dispatcher_helper(
+                let code = sedgen_return_dispatcher_helper(
                         f, 
                         func_table
-                ));
+                )?;
+                rstr.push_str(&code);
             }
         }
     }
-    rstr
+    Ok(rstr)
 }
 
 fn sedgen_func_call(
@@ -285,12 +289,12 @@ fn sedgen_func_def(func_def: &FuncDef, func_table:&[FuncDef]) -> Result<String, 
         else 
         {
             let pattern = "~\\([^\\~]*\\)".repeat(func_def.argc);
-
             let out = (0..func_def.argc)
                 .map(|i| format!("~\\{}", i 
                     + 1 // indexは1スタート
                     ))
                 .collect::<String>();
+
             format!(":func{}\n
 s/:retlabel[0-9]\\+{}[^\\|]*|$/{}/
 s/\\n\\(.*\\)/\\1/
@@ -387,7 +391,8 @@ pub fn sedgen_func_table(func_table:&[FuncDef]) -> Result<String, CompileErr>
         let code = sedgen_func_def(i, func_table)?;
         rstr.push_str(&code);
     }
-    rstr.push_str(&sedgen_return_dispatcher(func_table));
+    let code = sedgen_return_dispatcher(func_table)?;
+    rstr.push_str(&code);
     rstr.push_str(":done");
     Ok(rstr)
 }
@@ -397,8 +402,7 @@ pub fn sedgen_func_table(func_table:&[FuncDef]) -> Result<String, CompileErr>
 /// また、関数のラベルも解決する
 pub fn assemble_funcs(func_table:&mut [FuncDef]){
     //let mut func_table = vec![func_a, func_b];
-    // return addrの決定
-    // 関数の
+    // return addrの解決
     let mut pad = 0;
     let mut label_id = 0;
     for i in & mut *func_table{
