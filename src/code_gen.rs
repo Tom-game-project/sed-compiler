@@ -130,12 +130,17 @@ struct CallFunc {
 }
 
 impl CallFunc {
-    fn new(func_name: &str, localc: usize) -> Self{   
+    fn new(func_name: &str) -> Self{   
         Self { 
             func_name:func_name.to_string(),
-            localc,
+            localc: 0,
             return_addr_marker: ReturnAddrMarker(0)
         }
+    }
+
+    fn set_localc(&mut self, localc: usize)
+    {
+        self.localc = localc
     }
 }
 
@@ -381,6 +386,7 @@ s/\\n\\(.*\\)/\\1/
     Ok(rstr)
 }
 
+/// この関数を呼び出す前に必ずassemble_funcsを実行しfunc_tableの設定を終わらせる必要がある
 pub fn sedgen_func_table(func_table:&[FuncDef]) -> Result<String, CompileErr>
 {
     let mut rstr = "".to_string();
@@ -402,10 +408,21 @@ fn assemble_funcs(func_table:&mut [FuncDef]){
     // 関数の
     let mut pad = 0;
     let mut label_id = 0;
-    for i in func_table{
+    for i in & mut *func_table{
         pad = i.set_return_addr_offset(pad);
         i.id = label_id;
         label_id += 1;
+    }
+
+    // ローカル変数の解決
+    for i in func_table {
+        for j in &mut *i.proc_contents {
+            if let SedInstruction::Call(call_func) = j {
+                call_func
+                    .set_localc(i.localc + i.argc);
+                //println!("callfunc {} {}",call_func.func_name , call_func.localc);
+            }
+        }
     }
 }
 
@@ -427,11 +444,11 @@ pub fn build_ast_test02() -> String{
         vec![
             SedInstruction::LocalVal(&local_vals[0]), // L0
             SedInstruction::ConstVal(ConstVal::new("2")),
-            SedInstruction::Call(CallFunc::new("pow", 2)),
+            SedInstruction::Call(CallFunc::new("pow")),
             SedInstruction::LocalVal(&local_vals[1]), // L1
             SedInstruction::ConstVal(ConstVal::new("2")),
-            SedInstruction::Call(CallFunc::new("pow", 2)),
-            SedInstruction::Call(CallFunc::new("add", 2)),
+            SedInstruction::Call(CallFunc::new("pow")),
+            SedInstruction::Call(CallFunc::new("add")),
         ]
     );
 
@@ -490,8 +507,8 @@ pub fn build_ast_test03() -> String
             SedInstruction::LocalVal(&entry_local_vals[0]), // L0
             SedInstruction::ConstVal(ConstVal::new("world")),
             SedInstruction::LocalVal(&entry_local_vals[1]), // L1
-            SedInstruction::Call(CallFunc::new("add", 2)),
-            SedInstruction::Call(CallFunc::new("add", 2)),
+            SedInstruction::Call(CallFunc::new("add")),
+            SedInstruction::Call(CallFunc::new("add")),
         ]
     );
 
@@ -505,7 +522,7 @@ pub fn build_ast_test03() -> String
 
     func_add.set_proc_contents(
         vec![ // 引数のセットが終わった状態からスタート
-            SedInstruction::Sed(SedCode("s/~\\([^\\~]*\\)~\\([^\\~]*\\)/~\\1\\2/;".to_string())),
+            SedInstruction::Sed(SedCode("s/~\\([^\\~]*\\)~\\([^\\~]*\\)/~\\1\\2;/".to_string())),
         ]
     );
 
@@ -542,7 +559,7 @@ pub fn build_ast_test04() -> String
             SedInstruction::LocalVal(&entry_local_vals[0]), // L0
             SedInstruction::ConstVal(ConstVal::new("world")),
             SedInstruction::LocalVal(&entry_local_vals[1]), // L1
-            SedInstruction::Call(CallFunc::new("add3", 2))
+            SedInstruction::Call(CallFunc::new("add3"))
         ]
     );
 
@@ -557,8 +574,6 @@ pub fn build_ast_test04() -> String
     func_add.set_proc_contents(
         vec![
             SedInstruction::Sed(SedCode("s/~\\([^\\~]*\\)~\\([^\\~]*\\)/~\\1\\2;/".to_string())),
-            //SedInstruction::Call(
-            //    CallFunc::new("func_b", "\\n\\(.*\\)", "-\\1-\\1")),
         ]
     );
 
@@ -573,9 +588,10 @@ pub fn build_ast_test04() -> String
             SedInstruction::ArgVal(&add3_arg_vals[0]), // L0
             SedInstruction::ArgVal(&add3_arg_vals[1]),
             SedInstruction::ArgVal(&add3_arg_vals[2]), // L1
-            SedInstruction::Call(CallFunc::new("add", 3)),
-            SedInstruction::Call(CallFunc::new("add", 3)),
-            SedInstruction::Sed(SedCode("s/~[^\\~]*~[^\\~]*~[^\\~]*~\\([^\\~]*\\)/~\\1;/".to_string())),
+            SedInstruction::Call(CallFunc::new("add")),
+            SedInstruction::Call(CallFunc::new("add")),
+            SedInstruction::Sed(SedCode("s/~[^\\~]*~[^\\~]*~[^\\~]*~\\([^\\~]*\\)/~\\1;/".to_string())), // return処理
+            //                            |<----localc------------><>
         ]
     );
 
