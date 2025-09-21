@@ -2,7 +2,7 @@ use sed_practice::code_gen::*;
 
 // ======================================================================================
 
-pub fn build_ast_test02() -> String{
+pub fn gen_test_proc00() -> String{
     // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
     let mut entry = FuncDef::new("entry".to_string(), 0, 2, 1);
     let mut func_pow = FuncDef::new("pow".to_string(), 2, 1, 1); 
@@ -63,7 +63,7 @@ pub fn build_ast_test02() -> String{
 /// add
 /// add
 /// 
-pub fn build_ast_test03() -> String
+pub fn gen_test_proc01() -> String
 {
     // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
     let mut entry = FuncDef::new("entry".to_string(), 0, 2, 1);
@@ -114,7 +114,7 @@ pub fn build_ast_test03() -> String
 }
 
 /// 関数がさらに関数を呼び出すようなものの例
-pub fn build_ast_test04() -> String
+pub fn gen_test_proc02() -> String
 {
     // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
     let mut entry = FuncDef::new("entry".to_string(), 0, 2, 1);
@@ -182,46 +182,35 @@ pub fn build_ast_test04() -> String
     }
 }
 
-pub fn add(left: u64, right: u64) -> u64 {
-    left + right
-}
-
 #[cfg(test)]
 mod gen_test {
     use super::*;
     use std::fs::File;
     use std::io::Write;
 
-
     #[test]
-    fn it_works00() {
-        let result = add(2, 2);
-        assert_eq!(result, 4);
-    }
-
-    #[test]
-    fn it_works01() {
+    fn gen_test00() {
         let mut file = File::create("./sed/labo6.sed")
             .expect("ファイルが開けませんでした");  
-        let a = build_ast_test02();
+        let a = gen_test_proc00();
         file.write_all(a.as_bytes())
             .expect("書き込みに失敗しました");
     }
 
     #[test]
-    fn it_works02() {
+    fn gen_test01() {
         let mut file = File::create("./sed/labo6.sed")
             .expect("ファイルが開けませんでした");  
-        let a = build_ast_test03();
+        let a = gen_test_proc01();
         file.write_all(a.as_bytes())
             .expect("書き込みに失敗しました");
     }
 
     #[test]
-    fn it_works03() {
+    fn gen_test02() {
         let mut file = File::create("./sed/labo6.sed")
             .expect("ファイルが開けませんでした");  
-        let a = build_ast_test04();
+        let a = gen_test_proc02();
         file.write_all(a.as_bytes())
             .expect("書き込みに失敗しました");
     }

@@ -138,12 +138,16 @@ impl CallFunc {
         }
     }
 
+    /// この関数を呼び出しているスコープにおいて
+    /// どれだけのローカル変数が使用されているかをセットする
+    /// 主にassemble_func
     fn set_localc(&mut self, localc: usize)
     {
         self.localc = localc
     }
 }
 
+/// func tableから名前の一致する関数を探し出す
 fn find_function_definition_by_name<'a>(name: &str, func_table:&'a [FuncDef]) -> Option<&'a FuncDef<'a>>
 {
         func_table
@@ -305,10 +309,12 @@ s/\\n\\(.*\\)/\\1/
             rstr.push_str(&format!("{}\n", sed.0));
         }else if let SedInstruction::Call(func_call) = i {
             // 関数の定義を見つけ出し関数の呼び方を決定する
-            let func_def = find_function_definition_by_name(
-                &func_call.func_name,
-                func_table
-                ).expect("定義されていない関数");
+            let func_def = 
+                if let Some(a) = find_function_definition_by_name(&func_call.func_name, func_table) {
+                a
+            } else {
+                return Err(CompileErr::UndefinedFunction);
+            };
             if let Some(code) = sedgen_func_call(
                 func_def,
                 &func_call.return_addr_marker,
