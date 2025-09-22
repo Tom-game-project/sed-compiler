@@ -256,7 +256,6 @@ fn sedgen_func_call(
                 .collect::<Vec<String>>()
                 .join(""),
         );
-        //format!("-\\{}");
     Some(
         format!("
 # {}関数の呼び出し
@@ -286,9 +285,7 @@ fn sedgen_func_def(
 ) -> Result<String, CompileErr> {
     let is_entry = func_def.name == "entry";
 
-    let arg_vals_len = func_def.argc;
-    let local_vals_len = func_def.localc;
-    let fixed_offset = arg_vals_len + local_vals_len;
+    let fixed_offset = func_def.argc + func_def.localc;
     let mut stack_size = fixed_offset;
     
     let mut rstr = 
@@ -312,6 +309,7 @@ s/:retlabel[0-9]\\+{}[^\\|]*|$/{}{}/
 s/\\n\\(.*\\)/\\1/
 ", func_def.id, pattern, args_out, locals_out)
         };
+
     for instruction in &func_def.proc_contents {
         if let SedInstruction::Sed(sed) = instruction {
             rstr.push_str(&format!("{}\n", sed.0));
@@ -319,10 +317,10 @@ s/\\n\\(.*\\)/\\1/
             // 関数の定義を見つけ出し関数の呼び方を決定する
             let func_def = 
                 if let Some(a) = find_function_definition_by_name(&func_call.func_name, func_table) {
-                a
-            } else {
-                return Err(CompileErr::UndefinedFunction);
-            };
+                    a
+                } else {
+                    return Err(CompileErr::UndefinedFunction);
+                };
             if let Some(code) = sedgen_func_call(
                 func_def,
                 &func_call.return_addr_marker,
@@ -360,7 +358,7 @@ s/\\n\\(.*\\)/\\1/
             next_pattern.push(format!("~\\{}",
                 a.id 
                 + 1 // index が1から始まる
-                + arg_vals_len // 引数分のoffset
+                + func_def.argc // 引数分のoffset
             )); // スタックにローカル変数を積む
             rstr.push_str(&format!("s/{}/{}/\n",
                 "~\\([^\\~]*\\)".repeat(stack_size),

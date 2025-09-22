@@ -1,6 +1,5 @@
 use sed_practice::code_gen::*;
 
-// ======================================================================================
 
 pub fn gen_test_proc00() -> String{
     // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
@@ -165,7 +164,8 @@ pub fn gen_test_proc02() -> String
             SedInstruction::Call(CallFunc::new("add")),
             SedInstruction::Call(CallFunc::new("add")),
             SedInstruction::Sed(SedCode("s/~[^\\~]*~[^\\~]*~[^\\~]*~\\([^\\~]*\\)/~\\1;/".to_string())), // return処理
-            //                            |<----localc------------><>
+            //                            |<--------+------------>|
+            //                                      +-- func_def.argc + func_deflocalc
         ]
     );
 
@@ -190,6 +190,8 @@ pub fn gen_test_proc03() -> String
     let mut entry = FuncDef::new("entry".to_string(), 0, 2, 1);
     let mut func_add = FuncDef::new("add".to_string(), 2, 1, 1);
     let mut func_add3 =  FuncDef::new("add3".to_string(), 3, 0, 1);
+
+    // ======================== func entry ========================
 
     let entry_arg_vals: Vec<ArgVal> = vec![]; // entryの引数
     let entry_local_vals = vec![
@@ -219,21 +221,35 @@ pub fn gen_test_proc03() -> String
         ]
     );
 
+    // ======================== func add ========================
     let func_add_arg_vals: Vec<ArgVal> = vec![
         ArgVal::new(0),
         ArgVal::new(1),
     ]; // entryの引数
 
-    let func_add_local_vals:Vec<LocalVal> = vec![];
+    let func_add_local_vals:Vec<LocalVal> = vec![
+        LocalVal::new(0)
+    ];
+
+    let sed_values_add = vec![
+        SedValue::LocalVal(&func_add_local_vals[0]),
+    ];
     // 関数の内容を定義する
 
     func_add.set_proc_contents(
         vec![
-            //                             |<---------argc----------->|<----localc-->|
+            // 引数の受取部分
+            // local変数は未初期化
+
+            SedInstruction::ConstVal(ConstVal::new("hello hello hello hello")),
+            SedInstruction::Set(&sed_values_add[0]), // 関数内のローカル変数に値を代入する
+
+            //                             |<---------argc----------->|<---localc--->|
             SedInstruction::Sed(SedCode("s/~\\([^\\~]*\\)~\\([^\\~]*\\)~\\([^\\~]*\\)/~\\1\\2;/".to_string())),
         ]
     );
 
+    // ======================== func add3 ========================
     let add3_arg_vals: Vec<ArgVal> = vec![
         ArgVal::new(0),
         ArgVal::new(1),
@@ -248,7 +264,8 @@ pub fn gen_test_proc03() -> String
             SedInstruction::Call(CallFunc::new("add")),
             SedInstruction::Call(CallFunc::new("add")),
             SedInstruction::Sed(SedCode("s/~[^\\~]*~[^\\~]*~[^\\~]*~\\([^\\~]*\\)/~\\1;/".to_string())), // return処理
-            //                            |<----localc------------><>
+            //                            |<--------+------------>|
+            //                                      +-- func_def.argc + func_deflocalc>
         ]
     );
 
