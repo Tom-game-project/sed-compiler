@@ -279,6 +279,161 @@ pub enum CompileErr {
     StackUnderFlow,
 }
 
+// ------------------------- resolve instructions -----------------------------
+
+fn resolve_sed_instruction(
+    rstr: &mut String, 
+    sed: &SedCode,
+    stack_size:usize
+) -> usize
+{
+    rstr.push_str(&format!("{}\n", sed.0));
+    stack_size
+}
+
+fn resolve_call_instruction(
+    rstr: &mut String,
+    func_call: &CallFunc,
+    func_table:&[FuncDef], 
+    mut stack_size: usize
+) -> Result<usize, CompileErr>
+{
+    // 関数の定義を見つけ出し関数の呼び方を決定する
+    let func_def = 
+        if let Some(a) = find_function_definition_by_name(&func_call.func_name, func_table) {
+            a
+        } else {
+            return Err(CompileErr::UndefinedFunction);
+        };
+    if let Some(code) = sedgen_func_call(
+        func_def,
+        &func_call.return_addr_marker,
+        stack_size,
+    )
+    {
+        rstr.push_str(&code);
+        stack_size -= func_def.argc;
+        stack_size += func_def.retc;
+    }
+    else
+    {
+        return Err(CompileErr::UndefinedFunction)
+    }
+    Ok(stack_size)
+}
+
+fn resolve_argval_instruction(
+    rstr: &mut String,
+    a: &ArgVal,
+    mut stack_size:usize
+) -> usize
+{
+   let mut next_pattern = 
+            (1..stack_size + 1)
+                .map(|d| format!("~\\{}", d))
+                .collect::<Vec<String>>();
+        next_pattern.push(format!("~\\{}", 
+            a.id 
+            + 1 // index が1から始まる
+        )); // スタックに引数を積む
+        rstr.push_str(&format!("s/{}/{}/\n",
+            "~\\([^\\~]*\\)".repeat(stack_size),
+            next_pattern.join("")
+        )
+        );
+    stack_size += 1;
+    stack_size
+}
+
+fn resolve_localval_instruction(
+    rstr: &mut String,
+    a: &LocalVal,
+    func_def: &FuncDef,
+    mut stack_size:usize
+) -> usize
+{ 
+    let mut next_pattern = 
+        (1..stack_size + 1)
+            .map(|d| format!("~\\{}", d))
+            .collect::<Vec<String>>();
+    next_pattern.push(format!("~\\{}",
+        a.id 
+        + 1 // index が1から始まる
+        + func_def.argc // 引数分のoffset
+    )); // スタックにローカル変数を積む
+    rstr.push_str(&format!("s/{}/{}/\n",
+        "~\\([^\\~]*\\)".repeat(stack_size),
+        next_pattern.join("")
+    ));
+    stack_size += 1;
+    stack_size
+}
+
+fn resolve_constval_instruction(
+    rstr: &mut String,
+    a: &ConstVal,
+    mut stack_size:usize
+    ) -> usize
+{
+    let mut next_pattern = 
+    (1..stack_size + 1)
+        .map(|d| format!("~\\{}", d))
+        .collect::<Vec<String>>();
+    next_pattern.push(format!("~{}",
+            a.data
+    )); // 定数をスタックに積む
+    rstr.push_str(&format!("s/{}/{}/\n",
+        "~\\([^\\~]*\\)".repeat(stack_size),
+        next_pattern.join("")
+    ));
+    stack_size += 1;
+    stack_size
+}
+
+fn resolve_set_instruction(
+    rstr: &mut String,
+    a: &SedValue,
+    func_def: &FuncDef,
+    fixed_offset:usize,
+    mut stack_size:usize) -> Result<usize, CompileErr>
+{ 
+    // スタックの最上部を消費して、値をsetする
+    // stack_sizeが
+    // fixed_offsetだったらerror
+    match a {
+        SedValue::ArgVal(arg_a) => {
+            let mut next_pattern = 
+            (1..stack_size + 1 - 1)
+                .map(|d| format!("~\\{}", d))
+                .collect::<Vec<String>>();
+            if stack_size <= fixed_offset {
+                return Err(CompileErr::StackUnderFlow);
+            }
+            next_pattern[arg_a.id] = format!("~\\{}", stack_size); // TODO:安全にするget_mutなどで書き直したい
+            rstr.push_str(&format!("s/{}/{}/\n",
+                "~\\([^\\~]*\\)".repeat(stack_size),
+                next_pattern.join("")
+            ));
+        }
+        SedValue::LocalVal(loc_a) => {
+            let mut next_pattern = 
+            (1..stack_size + 1 - 1)
+                .map(|d| format!("~\\{}", d))
+                .collect::<Vec<String>>();
+            if stack_size <= fixed_offset {
+                return Err(CompileErr::StackUnderFlow);
+            }
+            next_pattern[func_def.argc + loc_a.id] = format!("~\\{}", stack_size); // TODO:安全にするget_mutなどで書き直したい
+            rstr.push_str(&format!("s/{}/{}/\n",
+                "~\\([^\\~]*\\)".repeat(stack_size),
+                next_pattern.join("")
+            ));
+        }
+    }
+    stack_size -= 1;
+    Ok(stack_size)
+}
+
 fn sedgen_func_def(
     func_def: &FuncDef,
     func_table:&[FuncDef]
@@ -311,113 +466,17 @@ s/\\n\\(.*\\)/\\1/
         };
 
     for instruction in &func_def.proc_contents {
-        if let SedInstruction::Sed(sed) = instruction {
-            rstr.push_str(&format!("{}\n", sed.0));
-        }else if let SedInstruction::Call(func_call) = instruction {
-            // 関数の定義を見つけ出し関数の呼び方を決定する
-            let func_def = 
-                if let Some(a) = find_function_definition_by_name(&func_call.func_name, func_table) {
-                    a
-                } else {
-                    return Err(CompileErr::UndefinedFunction);
-                };
-            if let Some(code) = sedgen_func_call(
-                func_def,
-                &func_call.return_addr_marker,
-                stack_size,
-            )
-            {
-                rstr.push_str(&code);
-                stack_size -= func_def.argc;
-                stack_size += func_def.retc;
+        stack_size = match instruction {
+            SedInstruction::Sed(sed) => resolve_sed_instruction(&mut rstr, sed, stack_size),
+            SedInstruction::Call(func_call) => resolve_call_instruction(&mut rstr, func_call, func_table, stack_size)?,
+            SedInstruction::ArgVal(a)=> resolve_argval_instruction(&mut rstr, a, stack_size),
+            SedInstruction::LocalVal(a) => resolve_localval_instruction(&mut rstr, a, func_def, stack_size),
+            SedInstruction::ConstVal(a)=> resolve_constval_instruction(&mut rstr, a, stack_size),
+            SedInstruction::Set(a) => resolve_set_instruction(&mut rstr, a, func_def, fixed_offset, stack_size)?,
+            SedInstruction::Ret(a) => {
+                0 // TODO
             }
-            else
-            {
-                return Err(CompileErr::UndefinedFunction)
-            }
-        } else if let SedInstruction::ArgVal(a) = instruction {
-            let mut next_pattern = 
-                (1..stack_size + 1)
-                    .map(|d| format!("~\\{}", d))
-                    .collect::<Vec<String>>();
-            next_pattern.push(format!("~\\{}", 
-                a.id 
-                + 1 // index が1から始まる
-            )); // スタックに引数を積む
-            rstr.push_str(&format!("s/{}/{}/\n",
-                "~\\([^\\~]*\\)".repeat(stack_size),
-                next_pattern.join("")
-            )
-            );
-            stack_size += 1;
-        } else if let SedInstruction::LocalVal(a) = instruction {
-            let mut next_pattern = 
-                (1..stack_size + 1)
-                    .map(|d| format!("~\\{}", d))
-                    .collect::<Vec<String>>();
-            next_pattern.push(format!("~\\{}",
-                a.id 
-                + 1 // index が1から始まる
-                + func_def.argc // 引数分のoffset
-            )); // スタックにローカル変数を積む
-            rstr.push_str(&format!("s/{}/{}/\n",
-                "~\\([^\\~]*\\)".repeat(stack_size),
-                next_pattern.join("")
-            ));
-            stack_size += 1;
-        } else if let SedInstruction::ConstVal(a) = instruction {
-            let mut next_pattern = 
-            (1..stack_size + 1)
-                .map(|d| format!("~\\{}", d))
-                .collect::<Vec<String>>();
-            next_pattern.push(format!("~{}",
-                    a.data
-            )); // 定数をスタックに積む
-            rstr.push_str(&format!("s/{}/{}/\n",
-                "~\\([^\\~]*\\)".repeat(stack_size),
-                next_pattern.join("")
-            ));
-            stack_size += 1;
-        } else if let SedInstruction::Ret(a) = instruction {
-            //match  {
-            //    
-            //}
-        } else if let SedInstruction::Set(a) = instruction {
-            // スタックの最上部を消費して、値をsetする
-            // stack_sizeが
-            // fixed_offsetだったらerror
-            match a {
-                SedValue::ArgVal(arg_a) => {
-                    let mut next_pattern = 
-                    (1..stack_size + 1 - 1)
-                        .map(|d| format!("~\\{}", d))
-                        .collect::<Vec<String>>();
-                    if stack_size <= fixed_offset {
-                        return Err(CompileErr::StackUnderFlow);
-                    }
-                    next_pattern[arg_a.id] = format!("~\\{}", stack_size); // TODO:安全にするget_mutなどで書き直したい
-                    rstr.push_str(&format!("s/{}/{}/\n",
-                        "~\\([^\\~]*\\)".repeat(stack_size),
-                        next_pattern.join("")
-                    ));
-                }
-                SedValue::LocalVal(loc_a) => {
-                    let mut next_pattern = 
-                    (1..stack_size + 1 - 1)
-                        .map(|d| format!("~\\{}", d))
-                        .collect::<Vec<String>>();
-                    if stack_size <= fixed_offset {
-                        return Err(CompileErr::StackUnderFlow);
-                    }
-                    next_pattern[func_def.argc + loc_a.id] = format!("~\\{}", stack_size); // TODO:安全にするget_mutなどで書き直したい
-                    rstr.push_str(&format!("s/{}/{}/\n",
-                        "~\\([^\\~]*\\)".repeat(stack_size),
-                        next_pattern.join("")
-                    ));
-                }
-            }
-            stack_size -= 1;
-        }
+        };
     }
 
     if is_entry {
