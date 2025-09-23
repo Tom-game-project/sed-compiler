@@ -230,46 +230,33 @@ s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\2/
     Ok(rstr)
 }
 
+/// TODO 引数の個数が10個を超えた場合に関して考える必要がある
 fn sedgen_func_call(
     func_def :&FuncDef,
     return_addr_marker: &ReturnAddrMarker,
     stack_size:usize,
 ) -> Option<String> {
-    let arg_pattern: String = 
-        "~\\([^\\~]*\\)".repeat(stack_size);
-    let arg_string: String = format!("{}{}",
-            (0..func_def.argc)
-                .map(|i| format!("~\\{}", 
-                        stack_size 
-                        - func_def.argc // argの始まりに合わせる 
-                        + i 
-                        + 1 // indexは1スタート
-                ))
-                .collect::<Vec<String>>()
-                .join(""),
-            (0..stack_size - func_def.argc) // 引数は消費され
-                                            // スタックからpopされる
-                .map(|i| format!("~\\{}", 
-                        i
-                        + 1 // indexは1スタート
-                ))
-                .collect::<Vec<String>>()
-                .join(""),
+    let retlabel = format!("retlabel{}", return_addr_marker.0);
+    let arg_pattern: String = format!("\\({}\\)\\({}\\)",
+            "~[^\\~]*".repeat(stack_size - func_def.argc),
+            "~[^\\~]*".repeat(func_def.argc)
         );
+    let arg_string = "\\2\\1";
+
     Some(
         format!("
 # {}関数の呼び出し
-s/{}/:retlabel{}{}|/
+s/{}/:{}{}|/
 H
 b func{}
-:retlabel{}
+:{}
 ",
         func_def.name,
         arg_pattern,
-        return_addr_marker.0,
+        retlabel,
         arg_string,
         func_def.id ,
-        return_addr_marker.0        
+        retlabel
         )
     )
 }
@@ -332,21 +319,6 @@ fn resolve_argval_instruction(
     mut stack_size:usize
 ) -> usize
 {
-    //let mut next_pattern = 
-    //    (1..stack_size + 1)
-    //        .map(|d| format!("~\\{}", d))
-    //        .collect::<Vec<String>>();
-    //next_pattern.push(format!("~\\{}", 
-    //    a.id 
-    //    + 1 // index が1から始まる
-    //)); // スタックに引数を積む
-    //rstr.push_str(&format!("s/{}/{}/\n",
-    //    "~\\([^\\~]*\\)".repeat(stack_size),
-    //    next_pattern.join("")
-    //));
-    //stack_size += 1;
-    //stack_size
-
     rstr.push_str(&format!("s/{}/{}/\n",
         format!("\\({}\\)\\(~[^\\~]*\\)\\({}\\)", 
             "~[^\\~]*".repeat(a.id),
@@ -367,22 +339,6 @@ fn resolve_localval_instruction(
     mut stack_size:usize
 ) -> usize
 { 
-    //let mut next_pattern = 
-    //    (1..stack_size + 1)
-    //        .map(|d| format!("~\\{}", d))
-    //        .collect::<Vec<String>>();
-    //next_pattern.push(format!("~\\{}",
-    //    a.id 
-    //    + 1 // index が1から始まる
-    //    + func_def.argc // 引数分のoffset
-    //)); // スタックにローカル変数を積む
-    //rstr.push_str(&format!("s/{}/{}/\n",
-    //    "~\\([^\\~]*\\)".repeat(stack_size),
-    //    next_pattern.join("")
-    //));
-    //stack_size += 1;
-    //stack_size
-
     rstr.push_str(&format!("s/{}/{}/\n",
         format!("\\({}\\)\\(~[^\\~]*\\)\\({}\\)", 
             "~[^\\~]*".repeat(func_def.argc + a.id),
@@ -402,22 +358,19 @@ fn resolve_constval_instruction(
     mut stack_size:usize
     ) -> usize
 {
-    let mut next_pattern = 
-    (1..stack_size + 1)
-        .map(|d| format!("~\\{}", d))
-        .collect::<Vec<String>>();
-    next_pattern.push(format!("~{}",
-            a.data
-    )); // 定数をスタックに積む
     rstr.push_str(&format!("s/{}/{}/\n",
-        "~\\([^\\~]*\\)".repeat(stack_size),
-        next_pattern.join("")
+        format!("\\({}\\)", 
+            "~[^\\~]*".repeat(stack_size),
+        ),
+        format!("\\1~{}", a.data)
     ));
+    rstr.push_str(&format!("# DEBUG from local stack_size {}\n", stack_size));
     stack_size += 1;
     stack_size
 }
 
 /// スタックトップを消費してローカル変数または引数にセットする
+/// 
 fn resolve_set_instruction(
     rstr: &mut String,
     a: &SedValue,
