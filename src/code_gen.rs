@@ -349,12 +349,12 @@ fn resolve_argval_instruction(
 
     rstr.push_str(&format!("s/{}/{}/\n",
         format!("\\({}\\)\\(~[^\\~]*\\)\\({}\\)", 
-            "~[^\\~]*".repeat(a.id + 1),
-            "~[^\\~]*".repeat(stack_size - (a.id + 1) - 1),
+            "~[^\\~]*".repeat(a.id),
+            "~[^\\~]*".repeat(stack_size - a.id - 1),
         ),
         "\\1\\2\\3\\2"
     ));
-    rstr.push_str(&format!("# DEBUG stack_size {}\n", stack_size));
+    rstr.push_str(&format!("# DEBUG from arg stack_size {}\n", stack_size));
     stack_size += 1;
     stack_size
 }
@@ -367,19 +367,30 @@ fn resolve_localval_instruction(
     mut stack_size:usize
 ) -> usize
 { 
-    let mut next_pattern = 
-        (1..stack_size + 1)
-            .map(|d| format!("~\\{}", d))
-            .collect::<Vec<String>>();
-    next_pattern.push(format!("~\\{}",
-        a.id 
-        + 1 // index が1から始まる
-        + func_def.argc // 引数分のoffset
-    )); // スタックにローカル変数を積む
+    //let mut next_pattern = 
+    //    (1..stack_size + 1)
+    //        .map(|d| format!("~\\{}", d))
+    //        .collect::<Vec<String>>();
+    //next_pattern.push(format!("~\\{}",
+    //    a.id 
+    //    + 1 // index が1から始まる
+    //    + func_def.argc // 引数分のoffset
+    //)); // スタックにローカル変数を積む
+    //rstr.push_str(&format!("s/{}/{}/\n",
+    //    "~\\([^\\~]*\\)".repeat(stack_size),
+    //    next_pattern.join("")
+    //));
+    //stack_size += 1;
+    //stack_size
+
     rstr.push_str(&format!("s/{}/{}/\n",
-        "~\\([^\\~]*\\)".repeat(stack_size),
-        next_pattern.join("")
+        format!("\\({}\\)\\(~[^\\~]*\\)\\({}\\)", 
+            "~[^\\~]*".repeat(func_def.argc + a.id),
+            "~[^\\~]*".repeat(stack_size - (func_def.argc + a.id) - 1),
+        ),
+        "\\1\\2\\3\\2"
     ));
+    rstr.push_str(&format!("# DEBUG from local stack_size {}\n", stack_size));
     stack_size += 1;
     stack_size
 }
