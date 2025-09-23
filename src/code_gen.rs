@@ -281,6 +281,7 @@ pub enum CompileErr {
 
 // ------------------------- resolve instructions -----------------------------
 
+/// 生のsedプログラムを格納する
 fn resolve_sed_instruction(
     rstr: &mut String, 
     sed: &SedCode,
@@ -291,6 +292,8 @@ fn resolve_sed_instruction(
     stack_size
 }
 
+/// 関数の呼び出し。
+/// スタックトップから引数の個数分消費し、返り値分を積む
 fn resolve_call_instruction(
     rstr: &mut String,
     func_call: &CallFunc,
@@ -322,29 +325,41 @@ fn resolve_call_instruction(
     Ok(stack_size)
 }
 
+/// 引数をスタックに積む
 fn resolve_argval_instruction(
     rstr: &mut String,
     a: &ArgVal,
     mut stack_size:usize
 ) -> usize
 {
-   let mut next_pattern = 
-            (1..stack_size + 1)
-                .map(|d| format!("~\\{}", d))
-                .collect::<Vec<String>>();
-        next_pattern.push(format!("~\\{}", 
-            a.id 
-            + 1 // index が1から始まる
-        )); // スタックに引数を積む
-        rstr.push_str(&format!("s/{}/{}/\n",
-            "~\\([^\\~]*\\)".repeat(stack_size),
-            next_pattern.join("")
-        )
-        );
+    //let mut next_pattern = 
+    //    (1..stack_size + 1)
+    //        .map(|d| format!("~\\{}", d))
+    //        .collect::<Vec<String>>();
+    //next_pattern.push(format!("~\\{}", 
+    //    a.id 
+    //    + 1 // index が1から始まる
+    //)); // スタックに引数を積む
+    //rstr.push_str(&format!("s/{}/{}/\n",
+    //    "~\\([^\\~]*\\)".repeat(stack_size),
+    //    next_pattern.join("")
+    //));
+    //stack_size += 1;
+    //stack_size
+
+    rstr.push_str(&format!("s/{}/{}/\n",
+        format!("\\({}\\)\\(~[^\\~]*\\)\\({}\\)", 
+            "~[^\\~]*".repeat(a.id + 1),
+            "~[^\\~]*".repeat(stack_size - (a.id + 1) - 1),
+        ),
+        "\\1\\2\\3\\2"
+    ));
+    rstr.push_str(&format!("# DEBUG stack_size {}\n", stack_size));
     stack_size += 1;
     stack_size
 }
 
+/// ローカル変数をスタックに積む
 fn resolve_localval_instruction(
     rstr: &mut String,
     a: &LocalVal,
@@ -369,6 +384,7 @@ fn resolve_localval_instruction(
     stack_size
 }
 
+/// 定数をスタックに積む
 fn resolve_constval_instruction(
     rstr: &mut String,
     a: &ConstVal,
@@ -390,6 +406,7 @@ fn resolve_constval_instruction(
     stack_size
 }
 
+/// スタックトップを消費してローカル変数または引数にセットする
 fn resolve_set_instruction(
     rstr: &mut String,
     a: &SedValue,
@@ -439,9 +456,7 @@ fn sedgen_func_def(
     func_table:&[FuncDef]
 ) -> Result<String, CompileErr> {
     let is_entry = func_def.name == "entry";
-
     let fixed_offset = func_def.argc + func_def.localc;
-    let mut stack_size = fixed_offset;
     
     let mut rstr = 
         if is_entry {
@@ -465,6 +480,7 @@ s/\\n\\(.*\\)/\\1/
 ", func_def.id, pattern, args_out, locals_out)
         };
 
+    let mut stack_size = fixed_offset;
     for instruction in &func_def.proc_contents {
         stack_size = match instruction {
             SedInstruction::Sed(sed) => resolve_sed_instruction(&mut rstr, sed, stack_size),
@@ -504,8 +520,9 @@ pub fn sedgen_func_table(func_table:&[FuncDef]) -> Result<String, CompileErr>
 }
 
 /// return addrの決定
-/// 関数を集めて、return アドレス(ラベル)を解決する
-/// また、関数のラベルも解決する
+/// 関数を集めて、
+/// return アドレス(ラベル)、
+/// 関数のラベルも解決する
 pub fn assemble_funcs(func_table:&mut [FuncDef]){
     //let mut func_table = vec![func_a, func_b];
     // return addrの解決
