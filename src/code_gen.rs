@@ -4,6 +4,10 @@ impl ReturnAddrMarker {
     pub fn incr(&mut self, d:usize) {
         self.0 += d;
     }
+
+    fn get_retlabel(&self) -> String {
+        format!("retlabel{}", self.0)
+    }
 }
 
 pub struct SedCode(pub String);
@@ -21,7 +25,9 @@ pub enum SedInstruction <'a>{
     /// 返り値をスタックに積む
     Call(CallFunc), // calling function
     Set(&'a SedValue<'a>),
-    Ret(&'a[&'a SedValue<'a>]) // return 複値返却を可能にする
+    Ret(&'a[&'a SedValue<'a>]), // return 複値返却を可能にする
+    /// スタックのtopの値によって条件分岐
+    IfProc(&'a IfProc<'a>)
 }
 
 /// |... ArgVal ...|... LocalVal...|[... stack zone ...]
@@ -30,6 +36,21 @@ pub enum SedInstruction <'a>{
 pub enum SedValue <'a>{
     ArgVal(&'a ArgVal),
     LocalVal(&'a LocalVal)
+}
+
+pub struct IfProc <'a>{
+    id:usize, // ラベルを決定するために使う
+    then_proc: Vec<SedInstruction<'a>>,
+    else_proc: Vec<SedInstruction<'a>>,
+}
+
+impl<'a> IfProc<'a> {
+    fn new(
+        then_proc:Vec<SedInstruction<'a>>,
+        else_proc:Vec<SedInstruction<'a>>,
+    ) -> Self {
+        Self { id: 0, then_proc, else_proc }
+    }
 }
 
 pub struct ArgVal {
@@ -67,11 +88,10 @@ pub struct FuncDef <'a>{
     id: usize,
     argc: usize,  // 引数の個数
     localc: usize,// ローカル変数の個数
-    retc: usize,
+    retc: usize,  // 返り値の個数
     return_addr_offset: ReturnAddrMarker,
     proc_contents: Vec<SedInstruction<'a>>
-} 
-// いくつFunction callがあるか数える関数
+}
 
 impl <'a>FuncDef <'a>{
     pub fn new(name:String, argc: usize, localc: usize, retc: usize) -> Self{
@@ -86,6 +106,7 @@ impl <'a>FuncDef <'a>{
         }
     }
 
+    /// いくつFunction callがあるか数える関数
     fn count_function_call(&self) -> usize {
         self.proc_contents
             .iter()
@@ -168,9 +189,7 @@ fn sedgen_return_dispatcher_helper(
         return Err(CompileErr::UndefinedFunction);
     };
     let mut rstr = "".to_string();
-    let retlabel = format!("retlabel{}", 
-        call_func.return_addr_marker.0
-    );
+    let retlabel = call_func.return_addr_marker.get_retlabel();
 
     rstr.push_str(&format!("/^.*\\n:{}\\+[^\\|]*|.*$/ {{\n", retlabel));
     // s/.../.../形式のマッチ文開始
@@ -178,25 +197,22 @@ fn sedgen_return_dispatcher_helper(
         // pattern
         rstr.push_str(&format!("s/.*\\n:{}", retlabel));
         rstr.push_str(&"~[^\\~]*".repeat(func_def.argc));
-        rstr.push_str(&"~\\([^\\~]*\\)".repeat( // <--+
-                call_func.localc - 1                    //    |
-        ));                                             //    |-[呼び出し元のローカル変数の個数]
-                                                        //    |
-        rstr.push_str(&"~\\([^\\|]*\\)".repeat( //    |
-                                                        //    |
-                1                                       //    |
-        ));                                             // <--+
-        rstr.push_str("|\\n");
-        rstr.push_str(&"~\\([^\\~;]*\\)".repeat(func_def.retc));
-        rstr.push_str(";$/");
-        rstr.push_str(
-            &(0..
-                call_func.localc // 呼び出しもとのローカル変数の個数
-                + func_def.retc  // 返り値の個数
+        // 呼び出し元のローカル変数を復元する
+        rstr.push_str(&format!("\\({}{}\\)", // TODO 
+            "~[^\\~]*".repeat(
+                call_func.localc - 1
+            ),
+            "~[^\\|]*".repeat(
+                1
             )
-            .map(|i| format!("~\\{}", i + 1))
-            .collect::<Vec<String>>()
-            .join(""));
+        ));
+        rstr.push_str("|\\n");
+        //rstr.push_str(&"~\\([^\\~;]*\\)".repeat(func_def.retc));
+        rstr.push_str(
+            &format!("\\({}\\)", "~[^\\~;]*".repeat(func_def.retc))
+        );
+        rstr.push_str(";$/");
+        rstr.push_str("\\1\\2");
         rstr.push_str("/\n");
     }
     rstr.push_str(&format!("b {}\n",retlabel));
@@ -236,7 +252,7 @@ fn sedgen_func_call(
     return_addr_marker: &ReturnAddrMarker,
     stack_size:usize,
 ) -> Option<String> {
-    let retlabel = format!("retlabel{}", return_addr_marker.0);
+    let retlabel = return_addr_marker.get_retlabel();
     let arg_pattern: String = format!("\\({}\\)\\({}\\)",
             "~[^\\~]*".repeat(stack_size - func_def.argc),
             "~[^\\~]*".repeat(func_def.argc)
@@ -369,6 +385,7 @@ fn resolve_constval_instruction(
     stack_size
 }
 
+
 /// スタックトップを消費してローカル変数または引数にセットする
 /// 
 fn resolve_set_instruction(
@@ -415,6 +432,36 @@ fn resolve_set_instruction(
     Ok(stack_size)
 }
 
+fn resolve_instructions(
+    rstr: &mut String,
+    func_def: &FuncDef,
+    fixed_offset:usize,
+    mut stack_size:usize,
+    func_table:&[FuncDef]
+) -> Result<usize, CompileErr>
+{
+    stack_size = stack_size + fixed_offset;
+    for instruction in &func_def.proc_contents {
+        stack_size = match instruction {
+            SedInstruction::Sed(sed) => resolve_sed_instruction(rstr, sed, stack_size),
+            SedInstruction::Call(func_call) => resolve_call_instruction(rstr, func_call, func_table, stack_size)?,
+            SedInstruction::ArgVal(a)=> resolve_argval_instruction(rstr, a, stack_size),
+            SedInstruction::LocalVal(a) => resolve_localval_instruction(rstr, a, func_def, stack_size),
+            SedInstruction::ConstVal(a)=> resolve_constval_instruction(rstr, a, stack_size),
+            SedInstruction::Set(a) => resolve_set_instruction(rstr, a, func_def, fixed_offset, stack_size)?,
+            SedInstruction::Ret(a) => {
+                0 // TODO
+            }
+            SedInstruction::IfProc(a) => {
+                stack_size = stack_size - 1;
+                stack_size
+            }
+        };
+    }
+
+    Ok(stack_size)
+}
+
 fn sedgen_func_def(
     func_def: &FuncDef,
     func_table:&[FuncDef]
@@ -444,20 +491,15 @@ s/\\n\\(.*\\)/\\1/
 ", func_def.id, pattern, args_out, locals_out)
         };
 
-    let mut stack_size = fixed_offset;
-    for instruction in &func_def.proc_contents {
-        stack_size = match instruction {
-            SedInstruction::Sed(sed) => resolve_sed_instruction(&mut rstr, sed, stack_size),
-            SedInstruction::Call(func_call) => resolve_call_instruction(&mut rstr, func_call, func_table, stack_size)?,
-            SedInstruction::ArgVal(a)=> resolve_argval_instruction(&mut rstr, a, stack_size),
-            SedInstruction::LocalVal(a) => resolve_localval_instruction(&mut rstr, a, func_def, stack_size),
-            SedInstruction::ConstVal(a)=> resolve_constval_instruction(&mut rstr, a, stack_size),
-            SedInstruction::Set(a) => resolve_set_instruction(&mut rstr, a, func_def, fixed_offset, stack_size)?,
-            SedInstruction::Ret(a) => {
-                0 // TODO
-            }
-        };
-    }
+    let mut stack_size = 0;
+
+    stack_size = resolve_instructions(
+        &mut rstr,
+        func_def,
+        fixed_offset, 
+        stack_size,
+        func_table
+    )?;
 
     if is_entry {
         rstr.push_str("b done\n"); // entry return
