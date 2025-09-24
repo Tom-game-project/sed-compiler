@@ -140,6 +140,10 @@ impl <'a>FuncDef <'a>{
         }
         offset + self.count_function_call()
     }
+
+    fn get_funclabel(&self)  -> String {
+        format!("func{}", self.id)
+    }
 }
 
 pub struct CallFunc {
@@ -169,7 +173,7 @@ impl CallFunc {
     }
 }
 
-/// func tableから名前の一致する関数を探し出す
+/// func_tableから名前の一致する関数を探し出す
 fn find_function_definition_by_name<'a>(name: &str, func_table:&'a [FuncDef]) -> Option<&'a FuncDef<'a>>
 {
         func_table
@@ -198,7 +202,8 @@ fn sedgen_return_dispatcher_helper(
         rstr.push_str(&format!("s/.*\\n:{}", retlabel));
         rstr.push_str(&"~[^\\~]*".repeat(func_def.argc));
         // 呼び出し元のローカル変数を復元する
-        rstr.push_str(&format!("\\({}{}\\)", // TODO 
+        rstr.push_str(&format!(
+            "\\({}{}\\)", // TODO call_func.localcの数が0のときの対応
             "~[^\\~]*".repeat(
                 call_func.localc - 1
             ),
@@ -246,14 +251,14 @@ s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\2/
     Ok(rstr)
 }
 
-/// TODO 引数の個数が10個を超えた場合に関して考える必要がある
 fn sedgen_func_call(
     func_def :&FuncDef,
     return_addr_marker: &ReturnAddrMarker,
     stack_size:usize,
 ) -> Option<String> {
     let retlabel = return_addr_marker.get_retlabel();
-    let arg_pattern: String = format!("\\({}\\)\\({}\\)",
+    let arg_pattern: String = format!(
+            "\\({}\\)\\({}\\)",
             "~[^\\~]*".repeat(stack_size - func_def.argc),
             "~[^\\~]*".repeat(func_def.argc)
         );
@@ -264,14 +269,14 @@ fn sedgen_func_call(
 # {}関数の呼び出し
 s/{}/:{}{}|/
 H
-b func{}
+b {}
 :{}
 ",
         func_def.name,
         arg_pattern,
         retlabel,
         arg_string,
-        func_def.id ,
+        func_def.get_funclabel(),
         retlabel
         )
     )
@@ -336,7 +341,8 @@ fn resolve_argval_instruction(
 ) -> usize
 {
     rstr.push_str(&format!("s/{}/{}/\n",
-        format!("\\({}\\)\\(~[^\\~]*\\)\\({}\\)", 
+        format!(
+            "\\({}\\)\\(~[^\\~]*\\)\\({}\\)", 
             "~[^\\~]*".repeat(a.id),
             "~[^\\~]*".repeat(stack_size - a.id - 1),
         ),
@@ -355,11 +361,13 @@ fn resolve_localval_instruction(
     mut stack_size:usize
 ) -> usize
 { 
-    rstr.push_str(&format!("s/{}/{}/\n",
-        format!("\\({}\\)\\(~[^\\~]*\\)\\({}\\)", 
-            "~[^\\~]*".repeat(func_def.argc + a.id),
-            "~[^\\~]*".repeat(stack_size - (func_def.argc + a.id) - 1),
-        ),
+    rstr.push_str(&format!(
+        "s/{}/{}/\n",
+            format!(
+                "\\({}\\)\\(~[^\\~]*\\)\\({}\\)", 
+                "~[^\\~]*".repeat(func_def.argc + a.id),
+                "~[^\\~]*".repeat(stack_size - (func_def.argc + a.id) - 1),
+            ),
         "\\1\\2\\3\\2"
     ));
     rstr.push_str(&format!("# DEBUG from local stack_size {}\n", stack_size));
@@ -375,7 +383,8 @@ fn resolve_constval_instruction(
     ) -> usize
 {
     rstr.push_str(&format!("s/{}/{}/\n",
-        format!("\\({}\\)", 
+        format!(
+            "\\({}\\)", 
             "~[^\\~]*".repeat(stack_size),
         ),
         format!("\\1~{}", a.data)
@@ -398,34 +407,33 @@ fn resolve_set_instruction(
     // スタックの最上部を消費して、値をsetする
     // stack_sizeが
     // fixed_offsetだったらerror
+
+    if stack_size <= fixed_offset {
+        return Err(CompileErr::StackUnderFlow);
+    }
     match a {
+        // TODO index関係のエラー処理
         SedValue::ArgVal(arg_a) => {
-            let mut next_pattern = 
-            (1..stack_size + 1 - 1)
-                .map(|d| format!("~\\{}", d))
-                .collect::<Vec<String>>();
-            if stack_size <= fixed_offset {
-                return Err(CompileErr::StackUnderFlow);
-            }
-            next_pattern[arg_a.id] = format!("~\\{}", stack_size); // TODO:安全にするget_mutなどで書き直したい
             rstr.push_str(&format!("s/{}/{}/\n",
-                "~\\([^\\~]*\\)".repeat(stack_size),
-                next_pattern.join("")
-            ));
+                           //\1      \2            \3
+                    format!("\\({}\\)~[^\\~]*\\({}\\)\\(~[^\\~]*\\)",
+                        "~[^\\~]*".repeat(arg_a.id),
+                        "~[^\\~]*".repeat(stack_size - arg_a.id - 2)
+                    ),
+                    "\\1\\3\\2"
+                )
+            );
         }
         SedValue::LocalVal(loc_a) => {
-            let mut next_pattern = 
-            (1..stack_size + 1 - 1)
-                .map(|d| format!("~\\{}", d))
-                .collect::<Vec<String>>();
-            if stack_size <= fixed_offset {
-                return Err(CompileErr::StackUnderFlow);
-            }
-            next_pattern[func_def.argc + loc_a.id] = format!("~\\{}", stack_size); // TODO:安全にするget_mutなどで書き直したい
             rstr.push_str(&format!("s/{}/{}/\n",
-                "~\\([^\\~]*\\)".repeat(stack_size),
-                next_pattern.join("")
-            ));
+                           //\1              \2      \3
+                    format!("\\({}\\)~[^\\~]*\\({}\\)\\(~[^\\~]*\\)",
+                        "~[^\\~]*".repeat(func_def.argc + loc_a.id),
+                        "~[^\\~]*".repeat(stack_size - (func_def.argc + loc_a.id) - 2)
+                    ),
+                    "\\1\\3\\2"
+                )
+            );
         }
     }
     stack_size -= 1;
@@ -474,21 +482,16 @@ fn sedgen_func_def(
             "".to_string()
         }
         else 
-        {
-            let pattern = "~\\([^\\~]*\\)".repeat(func_def.argc);
-            let args_out = (0..func_def.argc)
-                .map(|i| format!("~\\{}", i 
-                    + 1 // indexは1スタート
-                    ))
-                .collect::<String>();
+        {   
+            let pattern = format!("\\({}\\)", "~[^\\~]*".repeat(func_def.argc));
+            let args_out = "\\1";
             let locals_out = (0..func_def.localc)
                 .map(|_| "~init")
                 .collect::<String>();
-
-            format!(":func{}\n
+            format!(":{}\n
 s/:retlabel[0-9]\\+{}[^\\|]*|$/{}{}/
 s/\\n\\(.*\\)/\\1/
-", func_def.id, pattern, args_out, locals_out)
+", func_def.get_funclabel(), pattern, args_out, locals_out)
         };
 
     let mut stack_size = 0;
