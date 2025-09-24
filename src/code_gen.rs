@@ -348,7 +348,7 @@ fn resolve_argval_instruction(
         ),
         "\\1\\2\\3\\2"
     ));
-    rstr.push_str(&format!("# DEBUG from arg stack_size {}\n", stack_size));
+    // rstr.push_str(&format!("# DEBUG from arg stack_size {}\n", stack_size));
     stack_size += 1;
     stack_size
 }
@@ -370,7 +370,7 @@ fn resolve_localval_instruction(
             ),
         "\\1\\2\\3\\2"
     ));
-    rstr.push_str(&format!("# DEBUG from local stack_size {}\n", stack_size));
+    // rstr.push_str(&format!("# DEBUG from local stack_size {}\n", stack_size));
     stack_size += 1;
     stack_size
 }
@@ -389,7 +389,7 @@ fn resolve_constval_instruction(
         ),
         format!("\\1~{}", a.data)
     ));
-    rstr.push_str(&format!("# DEBUG from local stack_size {}\n", stack_size));
+    // rstr.push_str(&format!("# DEBUG from const stack_size {}\n", stack_size));
     stack_size += 1;
     stack_size
 }
