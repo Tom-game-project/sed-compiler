@@ -1,3 +1,4 @@
+
 /// この関数を使ってreturnアドレスを保存する
 struct ReturnAddrMarker(usize);
 impl ReturnAddrMarker {
@@ -25,9 +26,10 @@ pub enum SedInstruction <'a>{
     /// 返り値をスタックに積む
     Call(CallFunc), // calling function
     Set(&'a SedValue<'a>),
-    Ret(&'a[&'a SedValue<'a>]), // return 複値返却を可能にする
+    /// func_def.retc分スタックを消費して値を返却する
+    Ret,
     /// スタックのtopの値によって条件分岐
-    IfProc(&'a IfProc<'a>)
+    IfProc(IfProc<'a>)
 }
 
 /// |... ArgVal ...|... LocalVal...|[... stack zone ...]
@@ -45,11 +47,15 @@ pub struct IfProc <'a>{
 }
 
 impl<'a> IfProc<'a> {
-    fn new(
+    pub fn new(
         then_proc:Vec<SedInstruction<'a>>,
         else_proc:Vec<SedInstruction<'a>>,
     ) -> Self {
         Self { id: 0, then_proc, else_proc }
+    }
+
+    fn set_id(&mut self, id:usize) {
+        self.id = id
     }
 }
 
@@ -106,19 +112,9 @@ impl <'a>FuncDef <'a>{
         }
     }
 
-    /// いくつFunction callがあるか数える関数
-    fn count_function_call(&self) -> usize {
-        self.proc_contents
-            .iter()
-            .filter(|i| 
-            if let SedInstruction::Call(_f) = i {true} else {false})
-            .count()
-    }
-
     /// 関数の内容がセットされ、更に,callにはreturn_addr_markerが0から1ずつインクリメントして設定される
-    pub fn set_proc_contents(&mut self, proc_contents: Vec<SedInstruction<'a>>) {
+    pub fn set_proc_contents(&mut self, proc_contents: Vec<SedInstruction<'a>>) -> usize {
         self.proc_contents = proc_contents;
-
         let mut counter = 0;
         for i in &mut self.proc_contents {
             if let SedInstruction::Call(f) = i{
@@ -126,19 +122,22 @@ impl <'a>FuncDef <'a>{
                 counter += 1;
             }
         }
+        counter
     }
 
     /// offsetを設定
-    /// offset文だけすべてのReturnAddrMarkerを加算
+    /// offset分だけすべてのReturnAddrMarkerを加算
     /// offset + self.count_function_callを返却
     fn set_return_addr_offset(&mut self, offset:usize) -> usize{
         self.return_addr_offset = ReturnAddrMarker(offset);
+        let mut counter = 0;
         for i in &mut self.proc_contents {
             if let SedInstruction::Call(f) = i {
                 f.return_addr_marker.incr(offset);
+                counter += 1;
             }
         }
-        offset + self.count_function_call()
+        offset + counter
     }
 
     fn get_funclabel(&self)  -> String {
@@ -225,7 +224,7 @@ fn sedgen_return_dispatcher_helper(
     Ok(rstr)
 }
 
-/// ローカル変数を返せる
+/// 返り値を処理する関数
 fn sedgen_return_dispatcher(func_table: &[FuncDef]) -> Result<String, CompileErr>
 {
     let mut rstr = "
@@ -285,6 +284,7 @@ b {}
 pub enum CompileErr {
     UndefinedFunction,
     StackUnderFlow,
+    PoppingValueFromEmptyStack,
 }
 
 // ------------------------- resolve instructions -----------------------------
@@ -440,16 +440,39 @@ fn resolve_set_instruction(
     Ok(stack_size)
 }
 
+/// 返り値`return`の処理
+fn resolve_ret_instructions(
+    rstr: &mut String,
+    func_def: &FuncDef,
+    stack_size:usize,
+    fixed_offset:usize,
+) -> Result<usize, CompileErr>
+{
+    if fixed_offset + func_def.retc > stack_size {
+        return Err(CompileErr::PoppingValueFromEmptyStack);
+    }
+    let arg_pattern: String = format!(
+            "{}\\({}\\)",
+            "~[^\\~]*".repeat(stack_size - func_def.retc),
+            "~[^\\~]*".repeat(func_def.retc)
+        );
+    let arg_string = "\\1;";
+    rstr.push_str(&format!("s/{}/{}/\n", arg_pattern, arg_string));
+    rstr.push_str("b return_dispatcher\n"); // 最後は必ずreturn
+    Ok(0)
+}
+
 fn resolve_instructions(
     rstr: &mut String,
     func_def: &FuncDef,
+    proc_contents: &[SedInstruction], // 命令列
     fixed_offset:usize,
     mut stack_size:usize,
     func_table:&[FuncDef]
 ) -> Result<usize, CompileErr>
 {
     stack_size = stack_size + fixed_offset;
-    for instruction in &func_def.proc_contents {
+    for instruction in proc_contents {
         stack_size = match instruction {
             SedInstruction::Sed(sed) => resolve_sed_instruction(rstr, sed, stack_size),
             SedInstruction::Call(func_call) => resolve_call_instruction(rstr, func_call, func_table, stack_size)?,
@@ -457,11 +480,42 @@ fn resolve_instructions(
             SedInstruction::LocalVal(a) => resolve_localval_instruction(rstr, a, func_def, stack_size),
             SedInstruction::ConstVal(a)=> resolve_constval_instruction(rstr, a, stack_size),
             SedInstruction::Set(a) => resolve_set_instruction(rstr, a, func_def, fixed_offset, stack_size)?,
-            SedInstruction::Ret(a) => {
-                0 // TODO
-            }
+            SedInstruction::Ret => resolve_ret_instructions(rstr, func_def, stack_size, fixed_offset)?,
             SedInstruction::IfProc(a) => {
+                // if scope内では入る前のstack size以下になってはいけない
                 stack_size = stack_size - 1;
+                let then_stack_size = stack_size; // fixed
+                let else_stack_size = stack_size; // fixed
+                let mut then_code = String::new();
+                let mut else_code = String::new();
+                resolve_instructions(&mut then_code, func_def, &a.then_proc, then_stack_size, then_stack_size, func_table)?;
+                resolve_instructions(&mut else_code, func_def, &a.else_proc, else_stack_size, else_stack_size, func_table)?;
+
+                let reset_flag = format!("reset_flag{}", a.id);
+                let else_label = format!("else{}", a.id);
+                let then_label = format!("then{}", a.id);
+                let endif_label = format!("endif{}", a.id);
+
+                rstr.push_str(&format!("
+t{reset_flag}
+:{reset_flag}
+
+s/\\(.*\\)~[0]\\+$/\\1/
+
+t {else_label}
+b {then_label}
+
+:{then_label}
+{then_code}
+
+b {endif_label}
+:{else_label}
+{else_code}
+b {endif_label}
+:{endif_label}
+",
+));
+                //
                 stack_size
             }
         };
@@ -499,6 +553,7 @@ s/\\n\\(.*\\)/\\1/
     stack_size = resolve_instructions(
         &mut rstr,
         func_def,
+        &func_def.proc_contents,
         fixed_offset, 
         stack_size,
         func_table
@@ -528,6 +583,19 @@ pub fn sedgen_func_table(func_table:&[FuncDef]) -> Result<String, CompileErr>
     Ok(rstr)
 }
 
+/// ifを表現するラベルに割り当てる名前を解決する関数
+fn resolve_if_label(proc_contents: &mut Vec<SedInstruction>, mut min_id: usize) -> usize {
+    for j in &mut *proc_contents {
+        if let SedInstruction::IfProc(a) = j {
+            a.set_id(min_id);
+            min_id += 1;
+            min_id = resolve_if_label(&mut a.then_proc, min_id);
+            min_id = resolve_if_label(&mut a.else_proc, min_id);
+        }
+    }
+    min_id
+}
+
 /// return addrの決定
 /// 関数を集めて、
 /// return アドレス(ラベル)、
@@ -544,13 +612,20 @@ pub fn assemble_funcs(func_table:&mut [FuncDef]){
     }
 
     // ローカル変数の解決
-    for i in func_table {
+    for i in &mut *func_table {
         for j in &mut *i.proc_contents {
             if let SedInstruction::Call(call_func) = j {
                 call_func
                     .set_localc(i.localc + i.argc);
             }
         }
+    }
+
+    // ifスコープのラベル解決
+    let mut if_min_id = 0;
+
+    for i in &mut *func_table {
+        if_min_id = resolve_if_label(&mut i.proc_contents, if_min_id);
     }
 }
 
