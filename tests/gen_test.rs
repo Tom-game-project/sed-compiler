@@ -397,9 +397,7 @@ pub fn gen_test_proc04() -> String
     }
 }
 
-/// if分岐テスト
-pub fn gen_test_proc05() -> String 
-{
+fn gen_test_proc05() -> String {
     // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
     let mut entry = FuncDef::new("entry".to_string(), 0, 2, 1);
     let mut func_if_test = FuncDef::new("if_test".to_string(), 1, 1, 1);
@@ -476,7 +474,186 @@ pub fn gen_test_proc05() -> String
         println!("Compile err occured");
         "".to_string()
     }
+
 }
+
+
+/// if分岐テスト
+pub fn gen_test_proc06() -> String 
+{
+    // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
+    let mut entry = FuncDef::new("entry".to_string(), 0, 2, 1);
+    let mut func_mul = FuncDef::new("mul".to_string(), 2, 1, 1);
+    let mut func_add = FuncDef::new("add".to_string(), 2, 0, 1);
+    let mut func_shift_left1 = FuncDef::new("shift_left1".to_string(), 1, 0, 1);
+    let mut func_shift_right1 = FuncDef::new("shift_right1".to_string(), 1, 0, 1);
+    let mut func_is_empty = FuncDef::new("is_empty".to_string(), 1, 0, 1);
+    let mut func_ends_with_zero = FuncDef::new("ends_with_zero".to_string(), 1, 0, 1);
+
+    // ======================== func entry ========================
+
+    // let entry_arg_vals: Vec<ArgVal> = vec![]; // entryの引数
+    let entry_local_vals = vec![
+        LocalVal::new(0), // L0
+        LocalVal::new(1), // L1
+    ]; // entryのローカル変数
+
+    let sed_values: Vec<SedValue> = vec![
+        SedValue::LocalVal(&entry_local_vals[0]),
+        SedValue::LocalVal(&entry_local_vals[1]),
+    ];
+
+    entry.set_proc_contents(
+        vec![
+            SedInstruction::Sed(SedCode("s/.*/~init~init/".to_string())), //ローカル変数の初期化
+            SedInstruction::ConstVal(ConstVal::new("101101110")),
+            SedInstruction::Set(&sed_values[0]),
+            SedInstruction::ConstVal(ConstVal::new("11101110111")),
+            SedInstruction::Set(&sed_values[1]),
+            SedInstruction::LocalVal(&entry_local_vals[0]), // L0
+            SedInstruction::LocalVal(&entry_local_vals[1]), // L0
+            SedInstruction::Call(CallFunc::new("mul")),
+            SedInstruction::Set(&sed_values[0])
+        ]
+    );
+
+    // ======================== func ends_with_zero ========================
+    func_ends_with_zero.set_proc_contents(vec![
+            SedInstruction::Sed(SedCode("# 末尾が0なら、行全体を ~1; (True) に置換
+s/.*0$/~1;/
+# 上が成功しなかった場合、末尾が1なら ~0; (False) に置換
+s/.*1$/~0;/".to_string())),
+    ]);
+    // ======================== func is_empty ========================
+    func_is_empty.set_proc_contents(vec![
+        SedInstruction::Sed(SedCode("s/~$/T/   ".to_string())),
+        SedInstruction::Sed(SedCode("s/~.*$/F/ ".to_string())),
+        SedInstruction::Sed(SedCode("s/T/~1;/  ".to_string())),
+        SedInstruction::Sed(SedCode("s/F/~0;/  ".to_string())),
+    ]);
+    // ======================== func shift_left1 ========================
+    func_shift_left1.set_proc_contents(vec![
+        SedInstruction::Sed(SedCode("s/\\(~[01]*\\)/\\10;/".to_string())),
+    ]);
+    // ======================== func shift_right1 ========================
+    func_shift_right1.set_proc_contents(vec![
+        SedInstruction::Sed(SedCode("s/\\(~[01]*\\)[01]/\\1;/".to_string())),
+    ]);
+    // ======================== func add ========================
+    // 関数の内容を定義する
+
+    func_add.set_proc_contents(
+        vec![
+            SedInstruction::Sed(SedCode("# 入力をaddloopの形式に変換".to_string())),
+            SedInstruction::Sed(SedCode("s/~\\([^\\~]*\\)~\\([^\\~]*\\)/add 0;;\\1;\\2;/".to_string())),
+            SedInstruction::Sed(SedCode("b addloop".to_string())),
+            SedInstruction::Sed(SedCode(":addloop".to_string())),
+            SedInstruction::Sed(SedCode("s/add 1;\\([01]*\\);;;/1\\1/".to_string())),
+            SedInstruction::Sed(SedCode("s/add 0;\\([01]*\\);;;/\\1/".to_string())),
+            SedInstruction::Sed(SedCode("s/add \\([01]\\);\\([01]*\\);\\([01]*\\);;/add \\1;\\2;\\3;0;/".to_string())),
+            SedInstruction::Sed(SedCode("s/add \\([01]\\);\\([01]*\\);;\\([01]*\\);/add \\1;\\2;0;\\3;/".to_string())),
+            SedInstruction::Sed(SedCode("s/add \\([01]\\);\\([01]*\\);\\([01]*\\)\\([01]\\);\\([01]*\\)\\([01]\\);/add \\1\\4\\6;\\2;\\3;\\5;/".to_string())),
+            SedInstruction::Sed(SedCode("s/add 000;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;0\\1;\\2;\\3;/".to_string())),
+            SedInstruction::Sed(SedCode("s/add 001;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;1\\1;\\2;\\3;/".to_string())),
+            SedInstruction::Sed(SedCode("s/add 010;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;1\\1;\\2;\\3;/".to_string())),
+            SedInstruction::Sed(SedCode("s/add 011;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;0\\1;\\2;\\3;/".to_string())),
+            SedInstruction::Sed(SedCode("s/add 100;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;1\\1;\\2;\\3;/".to_string())),
+            SedInstruction::Sed(SedCode("s/add 101;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;0\\1;\\2;\\3;/".to_string())),
+            SedInstruction::Sed(SedCode("s/add 110;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;0\\1;\\2;\\3;/".to_string())),
+            SedInstruction::Sed(SedCode("s/add 111;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;1\\1;\\2;\\3;/".to_string())),
+            SedInstruction::Sed(SedCode("t addloop".to_string())),
+            SedInstruction::Sed(SedCode("s/\\(.*\\)/~\\1;/".to_string())),
+        ]
+    );
+
+    // ======================== func mul ========================
+    let func_if_test_arg_vals: Vec<ArgVal> = vec![
+        ArgVal::new(0), // a
+        ArgVal::new(1), // b
+    ]; // entryの引数
+
+    let func_if_test_local_vals:Vec<LocalVal> = vec![
+        LocalVal::new(0)
+    ];
+
+    let func_if_test_sed_values: Vec<SedValue> = vec![
+        SedValue::LocalVal(&func_if_test_local_vals[0]), // rstr
+    ];
+
+    func_mul.set_proc_contents(
+        vec![
+            SedInstruction::ArgVal(&func_if_test_arg_vals[1]), // b
+            SedInstruction::Call(CallFunc::new("is_empty")),
+            SedInstruction::IfProc(IfProc::new(
+                    vec![
+                        //SedInstruction::ConstVal(ConstVal::new("THEN")),
+                        //SedInstruction::Set(&func_if_test_sed_values[0]),
+                        SedInstruction::ConstVal(ConstVal::new("0")),
+                        SedInstruction::Set(&func_if_test_sed_values[0]), // rstr
+                    ],
+                    vec![
+                        SedInstruction::ArgVal(&func_if_test_arg_vals[1]),
+                        SedInstruction::Call(CallFunc::new("ends_with_zero")),
+                        SedInstruction::IfProc(IfProc::new(
+                                vec![
+                                        //SedInstruction::ConstVal(ConstVal::new("ELSE1")),
+                                        //SedInstruction::Set(&func_if_test_sed_values[0]),
+                                    // rstr = mul(shift_left1(a), shift_right1(b))
+                                    SedInstruction::ArgVal(&func_if_test_arg_vals[0]), // a
+                                    SedInstruction::Call(CallFunc::new("shift_left1")),
+                                    SedInstruction::ArgVal(&func_if_test_arg_vals[1]), // b
+                                    SedInstruction::Call(CallFunc::new("shift_right1")),
+                                    SedInstruction::Call(CallFunc::new("mul")),
+                                    SedInstruction::Set(&func_if_test_sed_values[0]), // rstr
+                                ],
+                                vec![
+                                        //SedInstruction::ConstVal(ConstVal::new("ELSE2")),
+                                        //SedInstruction::Set(&func_if_test_sed_values[0]),
+                                    // rstr = add(a, mul(shift_left1(a), shift_right1(b)))
+                                    SedInstruction::ArgVal(&func_if_test_arg_vals[0]), // a
+                                    SedInstruction::Call(CallFunc::new("shift_left1")),
+                                    SedInstruction::ArgVal(&func_if_test_arg_vals[1]), // b
+                                    SedInstruction::Call(CallFunc::new("shift_right1")),
+                                    SedInstruction::Call(CallFunc::new("mul")),
+                                    SedInstruction::ArgVal(&func_if_test_arg_vals[0]), // a
+                                    SedInstruction::Call(CallFunc::new("add")),
+                                    SedInstruction::Set(&func_if_test_sed_values[0]),  // rstr
+                                ]
+                        )),
+                    ]
+            )),
+            // return rstr;
+            SedInstruction::LocalVal(&func_if_test_local_vals[0]), 
+            SedInstruction::Ret,
+        ]
+    );
+
+    let mut func_table = vec![
+        entry,
+        func_mul, 
+        func_add,
+        func_is_empty,
+        func_shift_left1,
+        func_shift_right1,
+        func_ends_with_zero,
+    ];
+    assemble_funcs(&mut func_table);
+    let compile_result = sedgen_func_table(&func_table);
+    let mut rcode:String = String::from("");
+    if let Ok(code) = &compile_result
+    {
+        // println!("{}", code);
+        rcode = code.to_string();
+    }if let Err(e) = &compile_result
+    {
+        println!("{:?}", e);
+        rcode = "".to_string();
+    }
+    rcode
+}
+
+
+
 
 #[cfg(test)]
 mod gen_test {
@@ -534,6 +711,16 @@ mod gen_test {
         let mut file = File::create("./sed/if_example.sed")
             .expect("ファイルが開けませんでした");  
         let a = gen_test_proc05();
+        file.write_all(a.as_bytes())
+            .expect("書き込みに失敗しました");
+
+    }
+
+    #[test]
+    fn gen_test06() {
+        let mut file = File::create("./sed/if_example.sed")
+            .expect("ファイルが開けませんでした");  
+        let a = gen_test_proc06();
         file.write_all(a.as_bytes())
             .expect("書き込みに失敗しました");
 
