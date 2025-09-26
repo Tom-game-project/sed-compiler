@@ -488,8 +488,9 @@ fn resolve_instructions(
                 let else_stack_size = stack_size; // fixed
                 let mut then_code = String::new();
                 let mut else_code = String::new();
-                resolve_instructions(&mut then_code, func_def, &a.then_proc, then_stack_size, then_stack_size, func_table)?;
-                resolve_instructions(&mut else_code, func_def, &a.else_proc, else_stack_size, else_stack_size, func_table)?;
+                println!("if stack_size {}", stack_size);
+                resolve_instructions(&mut then_code, func_def, &a.then_proc, then_stack_size, 0, func_table)?;
+                resolve_instructions(&mut else_code, func_def, &a.else_proc, else_stack_size, 0, func_table)?;
 
                 let reset_flag = format!("reset_flag{}", a.id);
                 let else_label = format!("else{}", a.id);
@@ -506,6 +507,7 @@ t {else_label}
 b {then_label}
 
 :{then_label}
+s/\\(.*\\)~\\([^\\~]*\\)\\+$/\\1/
 {then_code}
 
 b {endif_label}

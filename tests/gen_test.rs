@@ -40,7 +40,7 @@ pub fn gen_test_proc00() -> String{
     let mut func_table = vec![entry, func_pow];
     assemble_funcs(&mut func_table);
     if let Ok(code) = sedgen_func_table(&func_table) {
-        println!("{}", code);
+        //println!("{}", code);
         code
     }
     else
@@ -102,7 +102,7 @@ pub fn gen_test_proc01() -> String
     let mut func_table = vec![entry, func_add];
     assemble_funcs(&mut func_table);
     if let Ok(code) = sedgen_func_table(&func_table) {
-        println!("{}", code);
+        // println!("{}", code);
         code
     }
     else
@@ -172,7 +172,7 @@ pub fn gen_test_proc02() -> String
     let mut func_table = vec![entry, func_add, func_add3];
     assemble_funcs(&mut func_table);
     if let Ok(code) = sedgen_func_table(&func_table) {
-        println!("{}", code);
+        // println!("{}", code);
         code
     }
     else
@@ -273,7 +273,7 @@ pub fn gen_test_proc03() -> String
     let mut func_table = vec![entry, func_strjoin, func_strjoin3];
     assemble_funcs(&mut func_table);
     if let Ok(code) = sedgen_func_table(&func_table) {
-        println!("{}", code);
+        // println!("{}", code);
         code
     }
     else
@@ -387,7 +387,7 @@ pub fn gen_test_proc04() -> String
     let mut func_table = vec![entry, func_add, func_add3];
     assemble_funcs(&mut func_table);
     if let Ok(code) = sedgen_func_table(&func_table) {
-        println!("{}", code);
+        // println!("{}", code);
         code
     }
     else
@@ -397,11 +397,12 @@ pub fn gen_test_proc04() -> String
     }
 }
 
+/// if分岐テスト
 pub fn gen_test_proc05() -> String 
 {
     // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
     let mut entry = FuncDef::new("entry".to_string(), 0, 2, 1);
-    let mut func_add = FuncDef::new("add".to_string(), 2, 0, 1);
+    let mut func_if_test = FuncDef::new("if_test".to_string(), 1, 1, 1);
 
     // ======================== func entry ========================
 
@@ -424,48 +425,50 @@ pub fn gen_test_proc05() -> String
             SedInstruction::ConstVal(ConstVal::new("11101110111")),
             SedInstruction::Set(&sed_values[1]),
             SedInstruction::LocalVal(&entry_local_vals[0]), // L0
-            SedInstruction::ConstVal(ConstVal::new("111")),
-            SedInstruction::LocalVal(&entry_local_vals[1]), // L1
-            SedInstruction::Call(CallFunc::new("add")),
-            SedInstruction::Set(&sed_values[0]),
-            SedInstruction::LocalVal(&entry_local_vals[0]), // L0
-            SedInstruction::Set(&sed_values[1]),
+            SedInstruction::Call(CallFunc::new("if_test")),
+            SedInstruction::Set(&sed_values[0])
         ]
     );
 
     // ======================== func add ========================
-    let func_add_arg_vals: Vec<ArgVal> = vec![
+    let func_if_test_arg_vals: Vec<ArgVal> = vec![
         ArgVal::new(0),
-        ArgVal::new(1),
     ]; // entryの引数
 
-    let func_add_local_vals:Vec<LocalVal> = vec![
+    let func_if_test_local_vals:Vec<LocalVal> = vec![
         LocalVal::new(0)
     ];
 
-    let sed_values_add = vec![
-        SedValue::LocalVal(&func_add_local_vals[0]),
+    let func_if_test_sed_values: Vec<SedValue> = vec![
+        SedValue::LocalVal(&func_if_test_local_vals[0]),
     ];
+
     // 関数の内容を定義する
 
-    func_add.set_proc_contents(
+    func_if_test.set_proc_contents(
         vec![
-            SedInstruction::Sed(SedCode("s/~\\([^\\~]*\\)/\\1/".to_string())),
-            // arg == hello
-            //SedInstruction::Sed(SedCode("s/~Hello/~/".to_string())),
+            //SedInstruction::Sed(SedCode("s/~\\([^\\~]*\\)/\\1/".to_string())),
+            SedInstruction::ConstVal(ConstVal::new("1")), // else節に入る
+            //SedInstruction::ConstVal(ConstVal::new("0")),
             SedInstruction::IfProc(IfProc::new(
                     vec![
+                        SedInstruction::ConstVal(ConstVal::new("Hello")),
+                        SedInstruction::Set(&func_if_test_sed_values[0]),
                     ],
                     vec![
+                        SedInstruction::ConstVal(ConstVal::new("World")),
+                        SedInstruction::Set(&func_if_test_sed_values[0]),
                     ]
             )),
+            SedInstruction::LocalVal(&func_if_test_local_vals[0]),
+            SedInstruction::Ret,
         ]
     );
 
-    let mut func_table = vec![entry, func_add];
+    let mut func_table = vec![entry, func_if_test];
     assemble_funcs(&mut func_table);
     if let Ok(code) = sedgen_func_table(&func_table) {
-        println!("{}", code);
+        // println!("{}", code);
         code
     }
     else
@@ -510,7 +513,7 @@ mod gen_test {
 
     #[test]
     fn gen_test03() {
-        let mut file = File::create("./sed/labo6.sed")
+        let mut file = File::create("./sed/strjoin.sed")
             .expect("ファイルが開けませんでした");  
         let a = gen_test_proc03();
         file.write_all(a.as_bytes())
@@ -519,10 +522,20 @@ mod gen_test {
 
     #[test]
     fn gen_test04() {
-        let mut file = File::create("./sed/labo6.sed")
+        let mut file = File::create("./sed/num_add.sed")
             .expect("ファイルが開けませんでした");  
         let a = gen_test_proc04();
         file.write_all(a.as_bytes())
             .expect("書き込みに失敗しました");
+    }
+
+    #[test]
+    fn gen_test05() {
+        let mut file = File::create("./sed/if_example.sed")
+            .expect("ファイルが開けませんでした");  
+        let a = gen_test_proc05();
+        file.write_all(a.as_bytes())
+            .expect("書き込みに失敗しました");
+
     }
 }
