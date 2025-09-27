@@ -1,7 +1,78 @@
 use sed_practice::code_gen::*;
 
+#[cfg(test)]
+mod gen_test {
+    use super::*;
+    use std::fs::File;
+    use std::io::Write;
 
-pub fn gen_test_proc00() -> String{
+    #[test]
+    fn gen_test00() {
+        let mut file = File::create("./sed/labo6.sed")
+            .expect("ファイルが開けませんでした");  
+        let a = gen_test_proc00();
+        file.write_all(a.as_bytes())
+            .expect("書き込みに失敗しました");
+    }
+
+    #[test]
+    fn gen_test01() {
+        let mut file = File::create("./sed/labo6.sed")
+            .expect("ファイルが開けませんでした");  
+        let a = gen_test_proc01();
+        file.write_all(a.as_bytes())
+            .expect("書き込みに失敗しました");
+    }
+
+    #[test]
+    fn gen_test02() {
+        let mut file = File::create("./sed/labo6.sed")
+            .expect("ファイルが開けませんでした");  
+        let a = gen_test_proc02();
+        file.write_all(a.as_bytes())
+            .expect("書き込みに失敗しました");
+    }
+
+    #[test]
+    fn gen_test03() {
+        let mut file = File::create("./sed/strjoin.sed")
+            .expect("ファイルが開けませんでした");  
+        let a = gen_test_proc03();
+        file.write_all(a.as_bytes())
+            .expect("書き込みに失敗しました");
+    }
+
+    #[test]
+    fn gen_test04() {
+        let mut file = File::create("./sed/num_add.sed")
+            .expect("ファイルが開けませんでした");  
+        let a = gen_test_proc04();
+        file.write_all(a.as_bytes())
+            .expect("書き込みに失敗しました");
+    }
+
+    #[test]
+    fn gen_test05() {
+        let mut file = File::create("./sed/if_example.sed")
+            .expect("ファイルが開けませんでした");  
+        let a = gen_test_proc05();
+        file.write_all(a.as_bytes())
+            .expect("書き込みに失敗しました");
+
+    }
+
+    #[test]
+    fn gen_test06() {
+        let mut file = File::create("./sed/mul.sed")
+            .expect("ファイルが開けませんでした");  
+        let a = gen_test_proc06();
+        file.write_all(a.as_bytes())
+            .expect("書き込みに失敗しました");
+
+    }
+}
+
+pub fn gen_test_proc00() -> String {
     // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
     let mut entry = FuncDef::new("entry".to_string(), 0, 2, 1);
     let mut func_pow = FuncDef::new("pow".to_string(), 2, 1, 1); 
@@ -449,14 +520,14 @@ fn gen_test_proc05() -> String {
             SedInstruction::ConstVal(ConstVal::new("1")), // else節に入る
             //SedInstruction::ConstVal(ConstVal::new("0")),
             SedInstruction::IfProc(IfProc::new(
-                    vec![
-                        SedInstruction::ConstVal(ConstVal::new("Hello")),
-                        SedInstruction::Set(&func_if_test_sed_values[0]),
-                    ],
-                    vec![
-                        SedInstruction::ConstVal(ConstVal::new("World")),
-                        SedInstruction::Set(&func_if_test_sed_values[0]),
-                    ]
+                vec![
+                    SedInstruction::ConstVal(ConstVal::new("Hello")),
+                    SedInstruction::Set(&func_if_test_sed_values[0]),
+                ],
+                vec![
+                    SedInstruction::ConstVal(ConstVal::new("World")),
+                    SedInstruction::Set(&func_if_test_sed_values[0]),
+                ]
             )),
             SedInstruction::LocalVal(&func_if_test_local_vals[0]),
             SedInstruction::Ret,
@@ -478,7 +549,8 @@ fn gen_test_proc05() -> String {
 }
 
 
-/// if分岐テスト
+/// mul関数のテスト
+/// 再帰的に定義したmul関数をコンパイル
 pub fn gen_test_proc06() -> String 
 {
     // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
@@ -519,10 +591,8 @@ pub fn gen_test_proc06() -> String
 
     // ======================== func ends_with_zero ========================
     func_ends_with_zero.set_proc_contents(vec![
-            SedInstruction::Sed(SedCode("# 末尾が0なら、行全体を ~1; (True) に置換
-s/.*0$/~1;/
-# 上が成功しなかった場合、末尾が1なら ~0; (False) に置換
-s/.*1$/~0;/".to_string())),
+        SedInstruction::Sed(SedCode("s/.*0$/~1;/ ".to_string())),
+        SedInstruction::Sed(SedCode("s/.*1$/~0;/ ".to_string())),
     ]);
     // ======================== func is_empty ========================
     func_is_empty.set_proc_contents(vec![
@@ -585,42 +655,36 @@ s/.*1$/~0;/".to_string())),
             SedInstruction::ArgVal(&func_if_test_arg_vals[1]), // b
             SedInstruction::Call(CallFunc::new("is_empty")),
             SedInstruction::IfProc(IfProc::new(
-                    vec![
-                        //SedInstruction::ConstVal(ConstVal::new("THEN")),
-                        //SedInstruction::Set(&func_if_test_sed_values[0]),
-                        SedInstruction::ConstVal(ConstVal::new("0")),
-                        SedInstruction::Set(&func_if_test_sed_values[0]), // rstr
-                    ],
-                    vec![
-                        SedInstruction::ArgVal(&func_if_test_arg_vals[1]),
-                        SedInstruction::Call(CallFunc::new("ends_with_zero")),
-                        SedInstruction::IfProc(IfProc::new(
-                                vec![
-                                        //SedInstruction::ConstVal(ConstVal::new("ELSE1")),
-                                        //SedInstruction::Set(&func_if_test_sed_values[0]),
-                                    // rstr = mul(shift_left1(a), shift_right1(b))
-                                    SedInstruction::ArgVal(&func_if_test_arg_vals[0]), // a
-                                    SedInstruction::Call(CallFunc::new("shift_left1")),
-                                    SedInstruction::ArgVal(&func_if_test_arg_vals[1]), // b
-                                    SedInstruction::Call(CallFunc::new("shift_right1")),
-                                    SedInstruction::Call(CallFunc::new("mul")),
-                                    SedInstruction::Set(&func_if_test_sed_values[0]), // rstr
-                                ],
-                                vec![
-                                        //SedInstruction::ConstVal(ConstVal::new("ELSE2")),
-                                        //SedInstruction::Set(&func_if_test_sed_values[0]),
-                                    // rstr = add(a, mul(shift_left1(a), shift_right1(b)))
-                                    SedInstruction::ArgVal(&func_if_test_arg_vals[0]), // a
-                                    SedInstruction::Call(CallFunc::new("shift_left1")),
-                                    SedInstruction::ArgVal(&func_if_test_arg_vals[1]), // b
-                                    SedInstruction::Call(CallFunc::new("shift_right1")),
-                                    SedInstruction::Call(CallFunc::new("mul")),
-                                    SedInstruction::ArgVal(&func_if_test_arg_vals[0]), // a
-                                    SedInstruction::Call(CallFunc::new("add")),
-                                    SedInstruction::Set(&func_if_test_sed_values[0]),  // rstr
-                                ]
-                        )),
-                    ]
+                vec![
+                    SedInstruction::ConstVal(ConstVal::new("0")),
+                    SedInstruction::Set(&func_if_test_sed_values[0]), // rstr
+                ],
+                vec![
+                    SedInstruction::ArgVal(&func_if_test_arg_vals[1]),
+                    SedInstruction::Call(CallFunc::new("ends_with_zero")),
+                    SedInstruction::IfProc(IfProc::new(
+                        vec![
+                            // rstr = mul(shift_left1(a), shift_right1(b))
+                            SedInstruction::ArgVal(&func_if_test_arg_vals[0]), // a
+                            SedInstruction::Call(CallFunc::new("shift_left1")),
+                            SedInstruction::ArgVal(&func_if_test_arg_vals[1]), // b
+                            SedInstruction::Call(CallFunc::new("shift_right1")),
+                            SedInstruction::Call(CallFunc::new("mul")),
+                            SedInstruction::Set(&func_if_test_sed_values[0]), // rstr
+                        ],
+                        vec![
+                            // rstr = add(a, mul(shift_left1(a), shift_right1(b)))
+                            SedInstruction::ArgVal(&func_if_test_arg_vals[0]), // a
+                            SedInstruction::Call(CallFunc::new("shift_left1")),
+                            SedInstruction::ArgVal(&func_if_test_arg_vals[1]), // b
+                            SedInstruction::Call(CallFunc::new("shift_right1")),
+                            SedInstruction::Call(CallFunc::new("mul")),
+                            SedInstruction::ArgVal(&func_if_test_arg_vals[0]), // a
+                            SedInstruction::Call(CallFunc::new("add")),
+                            SedInstruction::Set(&func_if_test_sed_values[0]),  // rstr
+                        ]
+                    )),
+                ]
             )),
             // return rstr;
             SedInstruction::LocalVal(&func_if_test_local_vals[0]), 
@@ -642,7 +706,6 @@ s/.*1$/~0;/".to_string())),
     let mut rcode:String = String::from("");
     if let Ok(code) = &compile_result
     {
-        // println!("{}", code);
         rcode = code.to_string();
     }if let Err(e) = &compile_result
     {
@@ -652,77 +715,3 @@ s/.*1$/~0;/".to_string())),
     rcode
 }
 
-
-
-
-#[cfg(test)]
-mod gen_test {
-    use super::*;
-    use std::fs::File;
-    use std::io::Write;
-
-    #[test]
-    fn gen_test00() {
-        let mut file = File::create("./sed/labo6.sed")
-            .expect("ファイルが開けませんでした");  
-        let a = gen_test_proc00();
-        file.write_all(a.as_bytes())
-            .expect("書き込みに失敗しました");
-    }
-
-    #[test]
-    fn gen_test01() {
-        let mut file = File::create("./sed/labo6.sed")
-            .expect("ファイルが開けませんでした");  
-        let a = gen_test_proc01();
-        file.write_all(a.as_bytes())
-            .expect("書き込みに失敗しました");
-    }
-
-    #[test]
-    fn gen_test02() {
-        let mut file = File::create("./sed/labo6.sed")
-            .expect("ファイルが開けませんでした");  
-        let a = gen_test_proc02();
-        file.write_all(a.as_bytes())
-            .expect("書き込みに失敗しました");
-    }
-
-    #[test]
-    fn gen_test03() {
-        let mut file = File::create("./sed/strjoin.sed")
-            .expect("ファイルが開けませんでした");  
-        let a = gen_test_proc03();
-        file.write_all(a.as_bytes())
-            .expect("書き込みに失敗しました");
-    }
-
-    #[test]
-    fn gen_test04() {
-        let mut file = File::create("./sed/num_add.sed")
-            .expect("ファイルが開けませんでした");  
-        let a = gen_test_proc04();
-        file.write_all(a.as_bytes())
-            .expect("書き込みに失敗しました");
-    }
-
-    #[test]
-    fn gen_test05() {
-        let mut file = File::create("./sed/if_example.sed")
-            .expect("ファイルが開けませんでした");  
-        let a = gen_test_proc05();
-        file.write_all(a.as_bytes())
-            .expect("書き込みに失敗しました");
-
-    }
-
-    #[test]
-    fn gen_test06() {
-        let mut file = File::create("./sed/if_example.sed")
-            .expect("ファイルが開けませんでした");  
-        let a = gen_test_proc06();
-        file.write_all(a.as_bytes())
-            .expect("書き込みに失敗しました");
-
-    }
-}

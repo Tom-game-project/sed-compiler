@@ -288,10 +288,9 @@ fn sedgen_return_dispatcher_helper(
         rstr.push_str(&format!("s/.*\\n:{}", retlabel));
         rstr.push_str(&"~[^\\~]*".repeat(func_def.argc));
         // 呼び出し元のローカル変数を復元する
-        // TODO ココらへんがおかしい
         if 0 < call_func.localc  {
             rstr.push_str(&format!(
-                "\\({}{}\\)", // TODO call_func.localcの数が0のときの対応
+                "\\({}{}\\)",
                 "~[^\\~]*".repeat(
                     call_func.localc - 1
                 ),
@@ -616,7 +615,7 @@ fn resolve_instructions(
                 let else_stack_size = stack_size; // fixed
                 let mut then_code = String::new();
                 let mut else_code = String::new();
-                println!("if stack_size {}", stack_size);
+                // println!("if stack_size {}", stack_size);
                 resolve_instructions(&mut then_code, func_def, &a.then_proc, then_stack_size, 0, func_table)?;
                 resolve_instructions(&mut else_code, func_def, &a.else_proc, else_stack_size, 0, func_table)?;
 
@@ -726,18 +725,11 @@ fn resolve_if_label(proc_contents: &mut Vec<SedInstruction>, mut min_id: usize) 
     min_id
 }
 
-
-
 /// return addrの決定
 /// 関数を集めて、
 /// return アドレス(ラベル)、
 /// 関数のラベルも解決する
 pub fn assemble_funcs(func_table:&mut [FuncDef]){
-    //let mut func_table = vec![func_a, func_b];
-    // return addrの解決
-
-    println!("{:#?}", func_table[1]);
-
     let mut pad = 0;
     let mut label_id = 0;
     for i in & mut *func_table{
