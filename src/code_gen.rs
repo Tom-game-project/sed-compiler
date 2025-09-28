@@ -220,39 +220,11 @@ trait SetReturnAddrOffset {
     fn set_return_addr_offset(&mut self, offset: usize) -> usize;
 }
 
-
-impl<'a> SetReturnAddrOffset for FuncDef<'a> {
+impl<'a> SetReturnAddrOffset for SedProgram <'a>{
     fn set_return_addr_offset(&mut self, offset: usize) -> usize {
-        self.return_addr_offset = ReturnAddrMarker(offset);
         let mut counter = 0;
-        for i in &mut *self.proc_contents {
-            if let SedInstruction::Call(f) = i {
-                f.return_addr_marker.incr(offset);
-                counter += 1;
-            }
-            else if let SedInstruction::IfProc(if_proc) = i {
-                counter = if_proc.set_return_addr_offset(counter);
-            }
-        }
-        offset + counter
-       
-    }
-}
-
-impl<'a> SetReturnAddrOffset for IfProc<'a> {
-    fn set_return_addr_offset(&mut self, offset:usize) -> usize {
-        let mut counter = 0;
-        for i in &mut *self.then_proc {
-            if let SedInstruction::Call(a) = i{
-                a.return_addr_marker.incr(offset);
-                counter += 1;
-            }
-            else if let SedInstruction::IfProc(if_proc) = i {
-                counter += if_proc.set_return_addr_offset(offset);
-            }
-        }
-        for i in &mut *self.else_proc {
-            if let SedInstruction::Call(a) = i{
+        for i in &mut *self.0{
+            if let SedInstruction::Call(a) = i {
                 a.return_addr_marker.incr(offset);
                 counter += 1;
             }
@@ -264,6 +236,18 @@ impl<'a> SetReturnAddrOffset for IfProc<'a> {
     }
 }
 
+impl<'a> SetReturnAddrOffset for FuncDef<'a> {
+    fn set_return_addr_offset(&mut self, offset: usize) -> usize {
+        self.return_addr_offset = ReturnAddrMarker(offset);
+        self.proc_contents.set_return_addr_offset(offset)
+    }
+}
+
+impl<'a> SetReturnAddrOffset for IfProc<'a> {
+    fn set_return_addr_offset(&mut self, offset:usize) -> usize {
+        self.then_proc.set_return_addr_offset(offset) + self.else_proc.set_return_addr_offset(offset)
+    }
+}
 
 #[derive(Debug)]
 pub struct CallFunc {
