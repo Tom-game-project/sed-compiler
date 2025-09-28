@@ -104,30 +104,6 @@ impl<'a> IfProc<'a> {
         }
         counter
     }
-
-    /// ローカル変数の解決
-    fn set_local_value(&mut self, localc: usize)
-    {
-        for i in &mut *self.then_proc {
-            if let SedInstruction::Call(call_func) = i {
-                call_func
-                    .set_localc(localc);
-            }
-            else if let SedInstruction::IfProc(if_proc) = i {
-                if_proc.set_local_value(localc);
-            }
-        }
-        for i in &mut *self.else_proc {
-            if let SedInstruction::Call(call_func) = i {
-                call_func
-                    .set_localc(localc);
-            }
-            else if let SedInstruction::IfProc(if_proc) = i {
-                if_proc.set_local_value(localc);
-            }
-        }
-    }
-
 }
 
 #[derive(Debug)]
@@ -232,14 +208,12 @@ impl CallFunc {
         }
     }
 
-    /// この関数を呼び出しているスコープにおいて
-    /// どれだけのローカル変数が使用されているかをセットする
-    /// 主にassemble_funcs
-    fn set_localc(&mut self, localc: usize)
-    {
-        self.localc = localc
-    }
 }
+
+
+// =========================================================================================
+//                                 ここから 共通実装
+// =========================================================================================
 
 
 /// returnアドレス解決のためのトレイト
@@ -381,6 +355,46 @@ impl<'a> SedgenReturnDispatcher for IfProc<'a>{
         Ok(rstr)
     }
 }
+
+trait SetLocalc {
+    fn set_localc(&mut self, localc: usize);
+}
+
+
+impl<'a> SetLocalc for SedProgram <'a>{
+    fn set_localc(&mut self, localc: usize) {
+        for j in &mut **self {
+            if let SedInstruction::Call(call_func) = j {
+                call_func
+                    .set_localc(localc);
+            } else if let SedInstruction::IfProc(if_proc) = j {
+                if_proc.set_localc(localc);
+            }
+        }
+    }
+}
+
+impl SetLocalc for CallFunc {
+    /// この関数を呼び出しているスコープにおいて
+    /// どれだけのローカル変数が使用されているかをセットする
+    /// 主にassemble_funcs
+    fn set_localc(&mut self, localc: usize)
+    {
+        self.localc = localc
+    }
+}
+
+impl<'a> SetLocalc for IfProc <'a>{
+    fn set_localc(&mut self, localc: usize) {
+        self.then_proc.set_localc(localc);
+        self.else_proc.set_localc(localc);
+    }
+}
+
+
+// =========================================================================================
+//                                 ここまで 共通実装
+// =========================================================================================
 
 /// func_tableから名前の一致する関数を探し出す
 fn find_function_definition_by_name<'a>(name: &str, func_table:&'a [FuncDef]) -> Option<&'a FuncDef<'a>>
@@ -762,14 +776,7 @@ pub fn assemble_funcs(func_table:&mut [FuncDef]){
 
     // ローカル変数の解決
     for i in &mut *func_table {
-        for j in &mut *i.proc_contents {
-            if let SedInstruction::Call(call_func) = j {
-                call_func
-                    .set_localc(i.localc + i.argc);
-            } else if let SedInstruction::IfProc(if_proc) = j {
-                if_proc.set_local_value(i.localc + i.argc);
-            }
-        }
+        i.proc_contents.set_localc(i.localc + i.argc);
     }
 
     // ifスコープのラベル解決
