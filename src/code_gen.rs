@@ -1,3 +1,4 @@
+use std::ops::{Deref, DerefMut};
 
 /// この関数を使ってreturnアドレスを保存する
 #[derive(Debug)]
@@ -14,6 +15,25 @@ impl ReturnAddrMarker {
 
 #[derive(Debug)]
 pub struct SedCode(pub String);
+
+#[derive(Debug)]
+struct SedProgram<'a>(Vec<SedInstruction<'a>>);
+
+// Derefトレイトを実装
+impl<'a> Deref for SedProgram<'a> {
+    type Target = Vec<SedInstruction<'a>>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+// DerefMutトレイトを実装
+impl<'a> DerefMut for SedProgram<'a> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
 
 #[derive(Debug)]
 pub enum SedInstruction <'a>{
@@ -47,8 +67,8 @@ pub enum SedValue <'a>{
 #[derive(Debug)]
 pub struct IfProc <'a>{
     id:usize, // ラベルを決定するために使う
-    then_proc: Vec<SedInstruction<'a>>,
-    else_proc: Vec<SedInstruction<'a>>,
+    then_proc: SedProgram<'a>,
+    else_proc: SedProgram<'a>,
 }
 
 impl<'a> IfProc<'a> {
@@ -56,7 +76,7 @@ impl<'a> IfProc<'a> {
         then_proc:Vec<SedInstruction<'a>>,
         else_proc:Vec<SedInstruction<'a>>,
     ) -> Self {
-        Self { id: 0, then_proc, else_proc }
+        Self { id: 0, then_proc: SedProgram(then_proc), else_proc: SedProgram(else_proc) }
     }
 
     fn set_id(&mut self, id:usize) {
@@ -153,7 +173,7 @@ pub struct FuncDef <'a>{
     localc: usize,// ローカル変数の個数
     retc: usize,  // 返り値の個数
     return_addr_offset: ReturnAddrMarker,
-    proc_contents: Vec<SedInstruction<'a>>
+    proc_contents: SedProgram<'a>
 }
 
 impl <'a>FuncDef <'a>{
@@ -165,15 +185,15 @@ impl <'a>FuncDef <'a>{
             localc,
             retc,
             return_addr_offset: ReturnAddrMarker(0),
-            proc_contents: vec![]
+            proc_contents: SedProgram(vec![])
         }
     }
 
     /// 関数の内容がセットされ、更に,callにはreturn_addr_markerが0から1ずつインクリメントして設定される
     pub fn set_proc_contents(&mut self, proc_contents: Vec<SedInstruction<'a>>) -> usize {
-        self.proc_contents = proc_contents;
+        self.proc_contents = SedProgram(proc_contents);
         let mut counter = 0;
-        for i in &mut self.proc_contents {
+        for i in &mut *self.proc_contents {
             if let SedInstruction::Call(f) = i{
                 f.return_addr_marker = ReturnAddrMarker(counter);
                 counter += 1;
@@ -205,7 +225,7 @@ impl<'a> SetReturnAddrOffset for FuncDef<'a> {
     fn set_return_addr_offset(&mut self, offset: usize) -> usize {
         self.return_addr_offset = ReturnAddrMarker(offset);
         let mut counter = 0;
-        for i in &mut self.proc_contents {
+        for i in &mut *self.proc_contents {
             if let SedInstruction::Call(f) = i {
                 f.return_addr_marker.incr(offset);
                 counter += 1;
@@ -333,7 +353,7 @@ fn sedgen_return_dispatcher_helper(
 fn sedgen_return_dispatcher_in_if_statement(if_proc: &IfProc, func_table: &[FuncDef]) -> Result<String, CompileErr>
 {
     let mut rstr:String = String::from("");
-    for i in &if_proc.then_proc {
+    for i in &*if_proc.then_proc {
             if let SedInstruction::Call(f) = i {
                 let code = sedgen_return_dispatcher_helper(
                         &f, 
@@ -345,7 +365,7 @@ fn sedgen_return_dispatcher_in_if_statement(if_proc: &IfProc, func_table: &[Func
                 rstr.push_str(&code);
             }
     }
-    for i in &if_proc.else_proc {
+    for i in &*if_proc.else_proc {
             if let SedInstruction::Call(f) = i {
                 let code = sedgen_return_dispatcher_helper(
                         &f, 
@@ -373,15 +393,15 @@ x
 s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\2/
 ".to_string();
     for i in func_table {
-        for j in &i.proc_contents {
+        for j in &*i.proc_contents {
             if let SedInstruction::Call(f) = j {
                 let code = sedgen_return_dispatcher_helper(
-                        f, 
+                        &f, 
                         func_table
                 )?;
                 rstr.push_str(&code);
             } else if let SedInstruction::IfProc(if_proc) = j {
-                let code = sedgen_return_dispatcher_in_if_statement(if_proc, func_table)?;
+                let code = sedgen_return_dispatcher_in_if_statement(&if_proc, func_table)?;
                 rstr.push_str(&code);
             }
         }
