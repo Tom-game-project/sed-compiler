@@ -19,7 +19,6 @@ pub struct SedCode(pub String);
 #[derive(Debug)]
 struct SedProgram<'a>(Vec<SedInstruction<'a>>);
 
-// Derefトレイトを実装
 impl<'a> Deref for SedProgram<'a> {
     type Target = Vec<SedInstruction<'a>>;
 
@@ -28,7 +27,6 @@ impl<'a> Deref for SedProgram<'a> {
     }
 }
 
-// DerefMutトレイトを実装
 impl<'a> DerefMut for SedProgram<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
@@ -129,6 +127,7 @@ impl<'a> IfProc<'a> {
             }
         }
     }
+
 }
 
 #[derive(Debug)]
@@ -213,6 +212,36 @@ impl <'a>FuncDef <'a>{
     }
 }
 
+#[derive(Debug)]
+pub struct CallFunc {
+    // 何を呼ぶか
+    // return addr
+    func_name: String,
+    /// 呼び出しもとのローカル変数の個数
+    /// 関数の引数とローカル変数を足したもの
+    localc: usize,
+    return_addr_marker: ReturnAddrMarker
+}
+
+impl CallFunc {
+    pub fn new(func_name: &str) -> Self{   
+        Self { 
+            func_name:func_name.to_string(),
+            localc: 0,
+            return_addr_marker: ReturnAddrMarker(0)
+        }
+    }
+
+    /// この関数を呼び出しているスコープにおいて
+    /// どれだけのローカル変数が使用されているかをセットする
+    /// 主にassemble_funcs
+    fn set_localc(&mut self, localc: usize)
+    {
+        self.localc = localc
+    }
+}
+
+
 /// returnアドレス解決のためのトレイト
 /// proc_contentsのような構造を含む場合に必ず必要になってくるので、
 /// 今後はよりデータに近い形に実装を変更していきたい
@@ -249,120 +278,6 @@ impl<'a> SetReturnAddrOffset for IfProc<'a> {
     }
 }
 
-#[derive(Debug)]
-pub struct CallFunc {
-    // 何を呼ぶか
-    // return addr
-    func_name: String,
-    /// 呼び出しもとのローカル変数の個数
-    localc: usize,
-    return_addr_marker: ReturnAddrMarker
-}
-
-impl CallFunc {
-    pub fn new(func_name: &str) -> Self{   
-        Self { 
-            func_name:func_name.to_string(),
-            localc: 0,
-            return_addr_marker: ReturnAddrMarker(0)
-        }
-    }
-
-    /// この関数を呼び出しているスコープにおいて
-    /// どれだけのローカル変数が使用されているかをセットする
-    /// 主にassemble_funcs
-    fn set_localc(&mut self, localc: usize)
-    {
-        self.localc = localc
-    }
-}
-
-/// func_tableから名前の一致する関数を探し出す
-fn find_function_definition_by_name<'a>(name: &str, func_table:&'a [FuncDef]) -> Option<&'a FuncDef<'a>>
-{
-        func_table
-            .iter()
-            .find(|f|f.name == name.to_string())
-}
-
-fn sedgen_return_dispatcher_helper(
-    call_func: &CallFunc,
-    func_table:&[FuncDef]
-) -> Result<String, CompileErr>
-{
-    let func_def = 
-        if let Some(a) = find_function_definition_by_name(&call_func.func_name, func_table) {
-        a
-    } else {
-        return Err(CompileErr::UndefinedFunction(call_func.func_name.clone()));
-    };
-    let mut rstr = "".to_string();
-    let retlabel = call_func.return_addr_marker.get_retlabel();
-
-    rstr.push_str(&format!("/^.*\\n:{}\\+[^\\|]*|.*$/ {{\n", retlabel));
-    // s/.../.../形式のマッチ文開始
-    {
-        // pattern
-        rstr.push_str(&format!("s/.*\\n:{}", retlabel));
-        rstr.push_str(&"~[^\\~]*".repeat(func_def.argc));
-        // 呼び出し元のローカル変数を復元する
-        if 0 < call_func.localc  {
-            rstr.push_str(&format!(
-                "\\({}{}\\)",
-                "~[^\\~]*".repeat(
-                    call_func.localc - 1
-                ),
-                "~[^\\|]*".repeat(
-                    1
-                )
-            ));
-        }
-        else {
-            rstr.push_str("\\(\\)");
-        }
-        rstr.push_str("|\\n");
-        //rstr.push_str(&"~\\([^\\~;]*\\)".repeat(func_def.retc));
-        rstr.push_str(
-            &format!("\\({}\\)", "~[^\\~;]*".repeat(func_def.retc))
-        );
-        rstr.push_str(";$/");
-        rstr.push_str("\\1\\2");
-        rstr.push_str("/\n");
-    }
-    rstr.push_str(&format!("b {}\n",retlabel));
-    rstr.push_str("}\n");
-    Ok(rstr)
-}
-
-fn sedgen_return_dispatcher_in_if_statement(if_proc: &IfProc, func_table: &[FuncDef]) -> Result<String, CompileErr>
-{
-    let mut rstr:String = String::from("");
-    for i in &*if_proc.then_proc {
-            if let SedInstruction::Call(f) = i {
-                let code = sedgen_return_dispatcher_helper(
-                        &f, 
-                        func_table
-                )?;
-                rstr.push_str(&code);
-            } else if let SedInstruction::IfProc(if_proc) = i {
-                let code = sedgen_return_dispatcher_in_if_statement(&if_proc, func_table)?;
-                rstr.push_str(&code);
-            }
-    }
-    for i in &*if_proc.else_proc {
-            if let SedInstruction::Call(f) = i {
-                let code = sedgen_return_dispatcher_helper(
-                        &f, 
-                        func_table
-                )?;
-                rstr.push_str(&code);
-            } else if let SedInstruction::IfProc(if_proc) = i {
-                let code = sedgen_return_dispatcher_in_if_statement(&if_proc, func_table)?;
-                rstr.push_str(&code);
-            }
-    }
-    Ok(rstr)
-}
 
 /// 返り値を処理する関数
 fn sedgen_return_dispatcher(func_table: &[FuncDef]) -> Result<String, CompileErr>
@@ -377,21 +292,104 @@ x
 s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\2/
 ".to_string();
     for i in func_table {
-        for j in &*i.proc_contents {
-            if let SedInstruction::Call(f) = j {
-                let code = sedgen_return_dispatcher_helper(
-                        &f, 
-                        func_table
-                )?;
-                rstr.push_str(&code);
-            } else if let SedInstruction::IfProc(if_proc) = j {
-                let code = sedgen_return_dispatcher_in_if_statement(&if_proc, func_table)?;
-                rstr.push_str(&code);
-            }
-        }
+        rstr.push_str(&i.proc_contents.sedgen_return_dispatcher(func_table)?);
     }
     Ok(rstr)
 }
+
+/// return dispatcherコードの生成
+trait SedgenReturnDispatcher {
+    fn sedgen_return_dispatcher(
+        &self,
+        func_table:&[FuncDef]
+    ) -> Result<String, CompileErr>;
+}
+
+impl<'a> SedgenReturnDispatcher for SedProgram<'a> {
+    fn sedgen_return_dispatcher(
+            &self,
+            func_table:&[FuncDef]
+        ) -> Result<String, CompileErr> {
+        let mut rstr = String::from("");
+        for j in &**self {
+            if let SedInstruction::Call(f) = j {
+                rstr.push_str(&f.sedgen_return_dispatcher(func_table)?);
+            } else if let SedInstruction::IfProc(if_proc) = j {
+                rstr.push_str(&if_proc.sedgen_return_dispatcher(func_table)?);
+            }
+        }
+        Ok(rstr)
+    }
+}
+
+impl SedgenReturnDispatcher for CallFunc{
+    fn sedgen_return_dispatcher(
+        &self,
+        func_table:&[FuncDef]
+    ) -> Result<String, CompileErr> {
+        let func_def = 
+        if let Some(a) = find_function_definition_by_name(&self.func_name, func_table) {
+            a
+        } else {
+            return Err(CompileErr::UndefinedFunction(self.func_name.clone()));
+        };
+        let mut rstr = "".to_string();
+        let retlabel = self.return_addr_marker.get_retlabel();
+
+        rstr.push_str(&format!("/^.*\\n:{}\\+[^\\|]*|.*$/ {{\n", retlabel));
+        // s/.../.../形式のマッチ文開始
+        {
+            // pattern
+            rstr.push_str(&format!("s/.*\\n:{}", retlabel));
+            rstr.push_str(&"~[^\\~]*".repeat(func_def.argc));
+            // 呼び出し元のローカル変数を復元する
+            if 0 < self.localc  {
+                rstr.push_str(&format!(
+                    "\\({}{}\\)",
+                    "~[^\\~]*".repeat(
+                        self.localc - 1
+                    ),
+                    "~[^\\|]*".repeat(
+                        1
+                    )
+                ));
+            }
+            else {
+                rstr.push_str("\\(\\)");
+            }
+            rstr.push_str("|\\n");
+            //rstr.push_str(&"~\\([^\\~;]*\\)".repeat(func_def.retc));
+            rstr.push_str(
+                &format!("\\({}\\)", "~[^\\~;]*".repeat(func_def.retc))
+            );
+            rstr.push_str(";$/");
+            rstr.push_str("\\1\\2");
+            rstr.push_str("/\n");
+        }
+        rstr.push_str(&format!("b {}\n",retlabel));
+        rstr.push_str("}\n");
+        Ok(rstr)
+
+    }
+}
+
+impl<'a> SedgenReturnDispatcher for IfProc<'a>{
+    fn sedgen_return_dispatcher(&self, func_table: &[FuncDef]) -> Result<String, CompileErr> {
+        let mut rstr:String = String::from("");
+        rstr.push_str(&self.then_proc.sedgen_return_dispatcher(func_table)?);
+        rstr.push_str(&self.else_proc.sedgen_return_dispatcher(func_table)?);
+        Ok(rstr)
+    }
+}
+
+/// func_tableから名前の一致する関数を探し出す
+fn find_function_definition_by_name<'a>(name: &str, func_table:&'a [FuncDef]) -> Option<&'a FuncDef<'a>>
+{
+        func_table
+            .iter()
+            .find(|f|f.name == name.to_string())
+}
+
 
 fn sedgen_func_call(
     func_def :&FuncDef,
@@ -607,42 +605,28 @@ fn resolve_ret_instructions(
     Ok(0)
 }
 
-fn resolve_instructions(
+fn resolve_if_instructions(
     rstr: &mut String,
+    a: &IfProc,
     func_def: &FuncDef,
-    proc_contents: &[SedInstruction], // 命令列
-    fixed_offset:usize,
     mut stack_size:usize,
     func_table:&[FuncDef]
-) -> Result<usize, CompileErr>
-{
-    stack_size = stack_size + fixed_offset;
-    for instruction in proc_contents {
-        stack_size = match instruction {
-            SedInstruction::Sed(sed) => resolve_sed_instruction(rstr, sed, stack_size),
-            SedInstruction::Call(func_call) => resolve_call_instruction(rstr, func_call, func_table, stack_size)?,
-            SedInstruction::ArgVal(a)=> resolve_argval_instruction(rstr, a, stack_size),
-            SedInstruction::LocalVal(a) => resolve_localval_instruction(rstr, a, func_def, stack_size),
-            SedInstruction::ConstVal(a)=> resolve_constval_instruction(rstr, a, stack_size),
-            SedInstruction::Set(a) => resolve_set_instruction(rstr, a, func_def, fixed_offset, stack_size)?,
-            SedInstruction::Ret => resolve_ret_instructions(rstr, func_def, stack_size, fixed_offset)?,
-            SedInstruction::IfProc(a) => {
-                // if scope内では入る前のstack size以下になってはいけない
-                stack_size = stack_size - 1;
-                let then_stack_size = stack_size; // fixed
-                let else_stack_size = stack_size; // fixed
-                let mut then_code = String::new();
-                let mut else_code = String::new();
-                // println!("if stack_size {}", stack_size);
-                resolve_instructions(&mut then_code, func_def, &a.then_proc, then_stack_size, 0, func_table)?;
-                resolve_instructions(&mut else_code, func_def, &a.else_proc, else_stack_size, 0, func_table)?;
+) -> Result<usize, CompileErr> {
+    // if scope内では入る前のstack size以下になってはいけない
+    stack_size = stack_size - 1;
+    let then_stack_size = stack_size; // fixed
+    let else_stack_size = stack_size; // fixed
+    let mut then_code = String::new();
+    let mut else_code = String::new();
+    resolve_instructions(&mut then_code, func_def, &a.then_proc, then_stack_size, 0, func_table)?;
+    resolve_instructions(&mut else_code, func_def, &a.else_proc, else_stack_size, 0, func_table)?;
 
-                let reset_flag = format!("reset_flag{}", a.id);
-                let else_label = format!("else{}", a.id);
-                let then_label = format!("then{}", a.id);
-                let endif_label = format!("endif{}", a.id);
+    let reset_flag = format!("reset_flag{}", a.id);
+    let else_label = format!("else{}", a.id);
+    let then_label = format!("then{}", a.id);
+    let endif_label = format!("endif{}", a.id);
 
-                rstr.push_str(&format!("
+    rstr.push_str(&format!("
 t{reset_flag}
 :{reset_flag}
 
@@ -662,9 +646,29 @@ b {endif_label}
 :{endif_label}
 ",
 ));
-                //
-                stack_size
-            }
+    Ok(stack_size)
+}
+
+fn resolve_instructions(
+    rstr: &mut String,
+    func_def: &FuncDef,
+    proc_contents: &[SedInstruction], // 命令列
+    fixed_offset:usize,
+    mut stack_size:usize,
+    func_table:&[FuncDef]
+) -> Result<usize, CompileErr>
+{
+    stack_size = stack_size + fixed_offset;
+    for instruction in proc_contents {
+        stack_size = match instruction {
+            SedInstruction::Sed(sed) => resolve_sed_instruction(rstr, sed, stack_size),
+            SedInstruction::Call(func_call) => resolve_call_instruction(rstr, func_call, func_table, stack_size)?,
+            SedInstruction::ArgVal(a)=> resolve_argval_instruction(rstr, a, stack_size),
+            SedInstruction::LocalVal(a) => resolve_localval_instruction(rstr, a, func_def, stack_size),
+            SedInstruction::ConstVal(a)=> resolve_constval_instruction(rstr, a, stack_size),
+            SedInstruction::Set(a) => resolve_set_instruction(rstr, a, func_def, fixed_offset, stack_size)?,
+            SedInstruction::Ret => resolve_ret_instructions(rstr, func_def, stack_size, fixed_offset)?,
+            SedInstruction::IfProc(a) => resolve_if_instructions(rstr, a, func_def, stack_size, func_table)?,
         };
     }
 
