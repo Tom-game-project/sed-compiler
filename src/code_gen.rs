@@ -227,7 +227,7 @@ trait SetReturnAddrOffset {
 impl<'a> SetReturnAddrOffset for SedProgram <'a>{
     fn set_return_addr_offset(&mut self, offset: usize) -> usize {
         let mut counter = 0;
-        for i in &mut *self.0{
+        for i in &mut **self{
             if let SedInstruction::Call(a) = i {
                 a.return_addr_marker.incr(offset);
                 counter += 1;
@@ -249,7 +249,8 @@ impl<'a> SetReturnAddrOffset for FuncDef<'a> {
 
 impl<'a> SetReturnAddrOffset for IfProc<'a> {
     fn set_return_addr_offset(&mut self, offset:usize) -> usize {
-        self.then_proc.set_return_addr_offset(offset) + self.else_proc.set_return_addr_offset(offset)
+        self.then_proc.set_return_addr_offset(offset)
+        + self.else_proc.set_return_addr_offset(offset)
     }
 }
 
@@ -328,7 +329,6 @@ impl SedgenReturnDispatcher for CallFunc{
                 rstr.push_str("\\(\\)");
             }
             rstr.push_str("|\\n");
-            //rstr.push_str(&"~\\([^\\~;]*\\)".repeat(func_def.retc));
             rstr.push_str(
                 &format!("\\({}\\)", "~[^\\~;]*".repeat(func_def.retc))
             );
@@ -487,24 +487,27 @@ fn resolve_call_instruction(
     Ok(stack_size)
 }
 
+fn resolve_stack_push_proc(stack_size:usize, offset:usize) -> String
+{
+    format!("s/{}/{}/\n",
+        format!(
+            "\\({}\\)\\(~[^\\~]*\\)\\({}\\)", 
+            "~[^\\~]*".repeat(offset),
+            "~[^\\~]*".repeat(stack_size - offset - 1),
+        ),
+        "\\1\\2\\3\\2"
+    )
+}
+
 /// 引数をスタックに積む
 fn resolve_argval_instruction(
     rstr: &mut String,
     a: &ArgVal,
-    mut stack_size:usize
+    stack_size:usize
 ) -> usize
 {
-    rstr.push_str(&format!("s/{}/{}/\n",
-        format!(
-            "\\({}\\)\\(~[^\\~]*\\)\\({}\\)", 
-            "~[^\\~]*".repeat(a.id),
-            "~[^\\~]*".repeat(stack_size - a.id - 1),
-        ),
-        "\\1\\2\\3\\2"
-    ));
-    // rstr.push_str(&format!("# DEBUG from arg stack_size {}\n", stack_size));
-    stack_size += 1;
-    stack_size
+    rstr.push_str(&resolve_stack_push_proc(stack_size, a.id));
+    stack_size + 1
 }
 
 /// ローカル変数をスタックに積む
@@ -512,21 +515,11 @@ fn resolve_localval_instruction(
     rstr: &mut String,
     a: &LocalVal,
     func_def: &FuncDef,
-    mut stack_size:usize
+    stack_size:usize
 ) -> usize
 { 
-    rstr.push_str(&format!(
-        "s/{}/{}/\n",
-            format!(
-                "\\({}\\)\\(~[^\\~]*\\)\\({}\\)", 
-                "~[^\\~]*".repeat(func_def.argc + a.id),
-                "~[^\\~]*".repeat(stack_size - (func_def.argc + a.id) - 1),
-            ),
-        "\\1\\2\\3\\2"
-    ));
-    // rstr.push_str(&format!("# DEBUG from local stack_size {}\n", stack_size));
-    stack_size += 1;
-    stack_size
+    rstr.push_str(&resolve_stack_push_proc(stack_size, func_def.argc + a.id));
+    stack_size + 1
 }
 
 /// 定数をスタックに積む
@@ -543,11 +536,22 @@ fn resolve_constval_instruction(
         ),
         format!("\\1~{}", a.data)
     ));
-    // rstr.push_str(&format!("# DEBUG from const stack_size {}\n", stack_size));
     stack_size += 1;
     stack_size
 }
 
+
+fn resolve_pop_and_set_proc(stack_size:usize, offset:usize) -> String
+{
+    format!("s/{}/{}/\n",
+               //\1      \2            \3
+        format!("\\({}\\)~[^\\~]*\\({}\\)\\(~[^\\~]*\\)",
+            "~[^\\~]*".repeat(offset),
+            "~[^\\~]*".repeat(stack_size - offset - 2)
+        ),
+        "\\1\\3\\2"
+    )
+}
 
 /// スタックトップを消費してローカル変数または引数にセットする
 /// 
@@ -569,26 +573,10 @@ fn resolve_set_instruction(
     match a {
         // TODO index関係のエラー処理
         SedValue::ArgVal(arg_a) => {
-            rstr.push_str(&format!("s/{}/{}/\n",
-                           //\1      \2            \3
-                    format!("\\({}\\)~[^\\~]*\\({}\\)\\(~[^\\~]*\\)",
-                        "~[^\\~]*".repeat(arg_a.id),
-                        "~[^\\~]*".repeat(stack_size - arg_a.id - 2)
-                    ),
-                    "\\1\\3\\2"
-                )
-            );
+            rstr.push_str(&resolve_pop_and_set_proc(stack_size, arg_a.id));
         }
         SedValue::LocalVal(loc_a) => {
-            rstr.push_str(&format!("s/{}/{}/\n",
-                           //\1              \2      \3
-                    format!("\\({}\\)~[^\\~]*\\({}\\)\\(~[^\\~]*\\)",
-                        "~[^\\~]*".repeat(func_def.argc + loc_a.id),
-                        "~[^\\~]*".repeat(stack_size - (func_def.argc + loc_a.id) - 2)
-                    ),
-                    "\\1\\3\\2"
-                )
-            );
+            rstr.push_str(&resolve_pop_and_set_proc(stack_size, func_def.argc + loc_a.id));
         }
     }
     stack_size -= 1;
