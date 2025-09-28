@@ -80,30 +80,6 @@ impl<'a> IfProc<'a> {
     fn set_id(&mut self, id:usize) {
         self.id = id
     }
-
-    fn init_return_addr_offset(&mut self, offset:usize) -> usize
-    {
-        let mut counter = offset;
-        for i in &mut *self.then_proc {
-            if let SedInstruction::Call(a) = i {
-                a.return_addr_marker = ReturnAddrMarker(counter);
-                counter += 1;
-            }
-            else if let SedInstruction::IfProc(if_proc) = i{
-                counter = if_proc.init_return_addr_offset(counter);
-            }
-        }
-        for i in &mut *self.else_proc {
-            if let SedInstruction::Call(a) = i {
-                a.return_addr_marker = ReturnAddrMarker(counter);
-                counter += 1;
-            }
-            else if let SedInstruction::IfProc(if_proc) = i{
-                counter = if_proc.init_return_addr_offset(counter);
-            }
-        }
-        counter
-    }
 }
 
 #[derive(Debug)]
@@ -168,17 +144,10 @@ impl <'a>FuncDef <'a>{
     pub fn set_proc_contents(&mut self, proc_contents: Vec<SedInstruction<'a>>) -> usize {
         self.proc_contents = SedProgram(proc_contents);
         let mut counter = 0;
-        for i in &mut *self.proc_contents {
-            if let SedInstruction::Call(f) = i{
-                f.return_addr_marker = ReturnAddrMarker(counter);
-                counter += 1;
-            }
-            else if let SedInstruction::IfProc(if_proc) = i {
-                counter = if_proc.init_return_addr_offset(counter);
-            }
-        }
+        counter = self.setup_proc_contents(counter);
         counter
     }
+
 
     /// offsetを設定
     /// offset分だけすべてのReturnAddrMarkerを加算
@@ -207,7 +176,6 @@ impl CallFunc {
             return_addr_marker: ReturnAddrMarker(0)
         }
     }
-
 }
 
 
@@ -215,6 +183,39 @@ impl CallFunc {
 //                                 ここから 共通実装
 // =========================================================================================
 
+/// 命令リストが設定されたときの最初のセットアップ
+trait  SetupProcContents{
+    fn setup_proc_contents(&mut self, counter: usize) -> usize;
+}
+
+impl<'a> SetupProcContents for SedProgram<'a> {
+    fn setup_proc_contents(&mut self, mut counter: usize) -> usize {
+        for i in &mut **self {
+            if let SedInstruction::Call(f) = i{
+                f.return_addr_marker = ReturnAddrMarker(counter);
+                counter += 1;
+            }
+            else if let SedInstruction::IfProc(if_proc) = i {
+                counter = if_proc.setup_proc_contents(counter);
+            }
+        }
+        counter
+    }
+}
+
+impl<'a> SetupProcContents for FuncDef <'a>{
+    fn setup_proc_contents(&mut self, counter: usize) -> usize {
+        self.proc_contents.setup_proc_contents(counter)
+    }
+}
+
+impl<'a> SetupProcContents for IfProc<'a> {
+    fn setup_proc_contents(&mut self, mut counter: usize) -> usize {
+        counter = self.then_proc.setup_proc_contents(counter);
+        counter = self.else_proc.setup_proc_contents(counter);
+        counter
+    }
+}
 
 /// returnアドレス解決のためのトレイト
 /// proc_contentsのような構造を含む場合に必ず必要になってくるので、
@@ -301,12 +302,7 @@ impl SedgenReturnDispatcher for CallFunc{
         &self,
         func_table:&[FuncDef]
     ) -> Result<String, CompileErr> {
-        let func_def = 
-        if let Some(a) = find_function_definition_by_name(&self.func_name, func_table) {
-            a
-        } else {
-            return Err(CompileErr::UndefinedFunction(self.func_name.clone()));
-        };
+        let func_def = find_function_definition_by_name(&self.func_name, func_table)?;
         let mut rstr = "".to_string();
         let retlabel = self.return_addr_marker.get_retlabel();
 
@@ -391,17 +387,24 @@ impl<'a> SetLocalc for IfProc <'a>{
     }
 }
 
-
 // =========================================================================================
 //                                 ここまで 共通実装
 // =========================================================================================
 
 /// func_tableから名前の一致する関数を探し出す
-fn find_function_definition_by_name<'a>(name: &str, func_table:&'a [FuncDef]) -> Option<&'a FuncDef<'a>>
+fn find_function_definition_by_name<'a>(name: &str, func_table:&'a [FuncDef]) -> Result<&'a FuncDef<'a>, CompileErr>
 {
+    if let Some(func_def) = 
         func_table
             .iter()
             .find(|f|f.name == name.to_string())
+    {
+        Ok(func_def)
+    }
+    else 
+    {
+        Err(CompileErr::UndefinedFunction(format!("{}", name)))
+    }
 }
 
 
@@ -466,12 +469,7 @@ fn resolve_call_instruction(
 ) -> Result<usize, CompileErr>
 {
     // 関数の定義を見つけ出し関数の呼び方を決定する
-    let func_def = 
-        if let Some(a) = find_function_definition_by_name(&func_call.func_name, func_table) {
-            a
-        } else {
-            return Err(CompileErr::UndefinedFunction(func_call.func_name.clone()));
-        };
+    let func_def = find_function_definition_by_name(&func_call.func_name, func_table)?;
     if let Some(code) = sedgen_func_call(
         func_def,
         &func_call.return_addr_marker,
