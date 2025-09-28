@@ -87,29 +87,6 @@ impl<'a> IfProc<'a> {
         counter
     }
 
-    fn set_return_addr_offset(&mut self, offset:usize) -> usize {
-        let mut counter = 0;
-        for i in &mut *self.then_proc {
-            if let SedInstruction::Call(a) = i{
-                a.return_addr_marker.incr(offset);
-                counter += 1;
-            }
-            else if let SedInstruction::IfProc(if_proc) = i {
-                counter += if_proc.set_return_addr_offset(offset);
-            }
-        }
-        for i in &mut *self.else_proc {
-            if let SedInstruction::Call(a) = i{
-                a.return_addr_marker.incr(offset);
-                counter += 1;
-            }
-            else if let SedInstruction::IfProc(if_proc) = i {
-                counter += if_proc.set_return_addr_offset(offset);
-            }
-        }
-        counter
-    }
-
     /// ローカル変数の解決
     fn set_local_value(&mut self, localc: usize)
     {
@@ -211,7 +188,21 @@ impl <'a>FuncDef <'a>{
     /// offsetを設定
     /// offset分だけすべてのReturnAddrMarkerを加算
     /// offset + self.count_function_callを返却
-    fn set_return_addr_offset(&mut self, offset:usize) -> usize{
+    fn get_funclabel(&self)  -> String {
+        format!("func{}", self.id)
+    }
+}
+
+/// returnアドレス解決のためのトレイト
+/// proc_contentsのような構造を含む場合に必ず必要になってくるので、
+/// 今後はよりデータに近い形に実装を変更していきたい
+trait SetReturnAddrOffset {
+    fn set_return_addr_offset(&mut self, offset: usize) -> usize;
+}
+
+
+impl<'a> SetReturnAddrOffset for FuncDef<'a> {
+    fn set_return_addr_offset(&mut self, offset: usize) -> usize {
         self.return_addr_offset = ReturnAddrMarker(offset);
         let mut counter = 0;
         for i in &mut self.proc_contents {
@@ -224,12 +215,35 @@ impl <'a>FuncDef <'a>{
             }
         }
         offset + counter
-    }
-
-    fn get_funclabel(&self)  -> String {
-        format!("func{}", self.id)
+       
     }
 }
+
+impl<'a> SetReturnAddrOffset for IfProc<'a> {
+    fn set_return_addr_offset(&mut self, offset:usize) -> usize {
+        let mut counter = 0;
+        for i in &mut *self.then_proc {
+            if let SedInstruction::Call(a) = i{
+                a.return_addr_marker.incr(offset);
+                counter += 1;
+            }
+            else if let SedInstruction::IfProc(if_proc) = i {
+                counter += if_proc.set_return_addr_offset(offset);
+            }
+        }
+        for i in &mut *self.else_proc {
+            if let SedInstruction::Call(a) = i{
+                a.return_addr_marker.incr(offset);
+                counter += 1;
+            }
+            else if let SedInstruction::IfProc(if_proc) = i {
+                counter += if_proc.set_return_addr_offset(offset);
+            }
+        }
+        counter
+    }
+}
+
 
 #[derive(Debug)]
 pub struct CallFunc {
