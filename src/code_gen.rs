@@ -148,7 +148,6 @@ impl <'a>FuncDef <'a>{
         counter
     }
 
-
     /// offsetを設定
     /// offset分だけすべてのReturnAddrMarkerを加算
     /// offset + self.count_function_callを返却
@@ -178,17 +177,28 @@ impl CallFunc {
     }
 }
 
+#[derive(Debug)]
+pub enum CompileErr {
+    UndefinedFunction(String),
+    StackUnderFlow(String),
+    PoppingValueFromEmptyStack,
+}
 
 // =========================================================================================
 //                                 ここから 共通実装
 // =========================================================================================
 
 /// 命令リストが設定されたときの最初のセットアップ
-trait  SetupProcContents{
+/// returnアドレス解決のためのトレイト
+/// proc_contentsのような構造を含む場合に必ず必要になってくるので、
+trait  ReturnAddrOffsetResolver{
+    /// 命令列がセットされた直後にリターンアドレスをセットします。
     fn setup_proc_contents(&mut self, counter: usize) -> usize;
+    /// 実行可能なプログラムを生成する前に、リターンアドレスの解決をします
+    fn set_return_addr_offset(&mut self, offset: usize) -> usize;
 }
 
-impl<'a> SetupProcContents for SedProgram<'a> {
+impl<'a> ReturnAddrOffsetResolver for SedProgram<'a> {
     fn setup_proc_contents(&mut self, mut counter: usize) -> usize {
         for i in &mut **self {
             if let SedInstruction::Call(f) = i{
@@ -201,30 +211,7 @@ impl<'a> SetupProcContents for SedProgram<'a> {
         }
         counter
     }
-}
 
-impl<'a> SetupProcContents for FuncDef <'a>{
-    fn setup_proc_contents(&mut self, counter: usize) -> usize {
-        self.proc_contents.setup_proc_contents(counter)
-    }
-}
-
-impl<'a> SetupProcContents for IfProc<'a> {
-    fn setup_proc_contents(&mut self, mut counter: usize) -> usize {
-        counter = self.then_proc.setup_proc_contents(counter);
-        counter = self.else_proc.setup_proc_contents(counter);
-        counter
-    }
-}
-
-/// returnアドレス解決のためのトレイト
-/// proc_contentsのような構造を含む場合に必ず必要になってくるので、
-/// 今後はよりデータに近い形に実装を変更していきたい
-trait SetReturnAddrOffset {
-    fn set_return_addr_offset(&mut self, offset: usize) -> usize;
-}
-
-impl<'a> SetReturnAddrOffset for SedProgram <'a>{
     fn set_return_addr_offset(&mut self, offset: usize) -> usize {
         let mut counter = 0;
         for i in &mut **self{
@@ -240,20 +227,29 @@ impl<'a> SetReturnAddrOffset for SedProgram <'a>{
     }
 }
 
-impl<'a> SetReturnAddrOffset for FuncDef<'a> {
+impl<'a> ReturnAddrOffsetResolver for FuncDef <'a>{
+    fn setup_proc_contents(&mut self, counter: usize) -> usize {
+        self.proc_contents.setup_proc_contents(counter)
+    }
+
     fn set_return_addr_offset(&mut self, offset: usize) -> usize {
         self.return_addr_offset = ReturnAddrMarker(offset);
         self.proc_contents.set_return_addr_offset(offset)
     }
 }
 
-impl<'a> SetReturnAddrOffset for IfProc<'a> {
+impl<'a> ReturnAddrOffsetResolver for IfProc<'a> {
+    fn setup_proc_contents(&mut self, mut counter: usize) -> usize {
+        counter = self.then_proc.setup_proc_contents(counter);
+        counter = self.else_proc.setup_proc_contents(counter);
+        counter
+    }
+
     fn set_return_addr_offset(&mut self, offset:usize) -> usize {
         self.then_proc.set_return_addr_offset(offset)
         + self.else_proc.set_return_addr_offset(offset)
     }
 }
-
 
 /// 返り値を処理する関数
 fn sedgen_return_dispatcher(func_table: &[FuncDef]) -> Result<String, CompileErr>
@@ -407,44 +403,6 @@ fn find_function_definition_by_name<'a>(name: &str, func_table:&'a [FuncDef]) ->
     }
 }
 
-
-fn sedgen_func_call(
-    func_def :&FuncDef,
-    return_addr_marker: &ReturnAddrMarker,
-    stack_size:usize,
-) -> Option<String> {
-    let retlabel = return_addr_marker.get_retlabel();
-    let arg_pattern: String = format!(
-            "\\({}\\)\\({}\\)",
-            "~[^\\~]*".repeat(stack_size - func_def.argc),
-            "~[^\\~]*".repeat(func_def.argc)
-        );
-    let arg_string = "\\2\\1";
-
-    Some(
-        format!("
-# {}関数の呼び出し
-s/{}/:{}{}|/
-H
-b {}
-:{}
-",
-        func_def.name,
-        arg_pattern,
-        retlabel,
-        arg_string,
-        func_def.get_funclabel(),
-        retlabel
-        )
-    )
-}
-
-#[derive(Debug)]
-pub enum CompileErr {
-    UndefinedFunction(String),
-    StackUnderFlow(String),
-    PoppingValueFromEmptyStack,
-}
 
 // ------------------------- resolve instructions -----------------------------
 
@@ -675,6 +633,40 @@ fn resolve_instructions(
     Ok(stack_size)
 }
 
+// ------------------------- sedgen instructions -----------------------------
+
+fn sedgen_func_call(
+    func_def :&FuncDef,
+    return_addr_marker: &ReturnAddrMarker,
+    stack_size:usize,
+) -> Option<String> {
+    let retlabel = return_addr_marker.get_retlabel();
+    let arg_pattern: String = format!(
+            "\\({}\\)\\({}\\)",
+            "~[^\\~]*".repeat(stack_size - func_def.argc),
+            "~[^\\~]*".repeat(func_def.argc)
+        );
+    let arg_string = "\\2\\1";
+
+    Some(
+        format!("
+# {}関数の呼び出し
+s/{}/:{}{}|/
+H
+b {}
+:{}
+",
+        func_def.name,
+        arg_pattern,
+        retlabel,
+        arg_string,
+        func_def.get_funclabel(),
+        retlabel
+        )
+    )
+}
+
+
 fn sedgen_func_def(
     func_def: &FuncDef,
     func_table:&[FuncDef]
@@ -720,6 +712,7 @@ s/\\n\\(.*\\)/\\1/
     Ok(rstr)
 }
 
+
 /// この関数を呼び出す前に必ずassemble_funcsを実行しfunc_tableの設定を終わらせる必要がある
 pub fn sedgen_func_table(func_table:&[FuncDef]) -> Result<String, CompileErr>
 {
@@ -734,6 +727,9 @@ pub fn sedgen_func_table(func_table:&[FuncDef]) -> Result<String, CompileErr>
     Ok(rstr)
 }
 
+// ------------------------- resolve entry -----------------------------
+
+
 /// ifを表現するラベルに割り当てる名前を解決する関数
 fn resolve_if_label(proc_contents: &mut Vec<SedInstruction>, mut min_id: usize) -> usize {
     for j in &mut *proc_contents {
@@ -746,6 +742,7 @@ fn resolve_if_label(proc_contents: &mut Vec<SedInstruction>, mut min_id: usize) 
     }
     min_id
 }
+
 
 /// return addrの決定
 /// 関数を集めて、
