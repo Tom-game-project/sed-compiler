@@ -148,9 +148,6 @@ impl <'a>FuncDef <'a>{
         counter
     }
 
-    /// offsetを設定
-    /// offset分だけすべてのReturnAddrMarkerを加算
-    /// offset + self.count_function_callを返却
     fn get_funclabel(&self)  -> String {
         format!("func{}", self.id)
     }
@@ -524,10 +521,9 @@ fn resolve_set_instruction(
     // stack_sizeが
     // fixed_offsetだったらerror
 
-    if stack_size < fixed_offset {
+    if stack_size <= fixed_offset {
         return Err(CompileErr::StackUnderFlow(format!("stack_size: {}, fixed_offset: {}", stack_size, fixed_offset)));
     }
-    rstr.push_str(&format!("# stack_size: {}, fixed_offset: {}\n", stack_size, fixed_offset));
     match a {
         // TODO index関係のエラー処理
         SedValue::ArgVal(arg_a) => {
@@ -650,7 +646,7 @@ fn sedgen_func_call(
 
     Some(
         format!("
-# {}関数の呼び出し
+# function call: {}
 s/{}/:{}{}|/
 H
 b {}
