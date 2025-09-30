@@ -280,25 +280,20 @@ pub fn gen_test_proc03() -> String
         LocalVal::new(1), // L1
     ]; // entryのローカル変数
 
-    let sed_values: Vec<SedValue> = vec![
-        SedValue::LocalVal(&entry_local_vals[0]),
-        SedValue::LocalVal(&entry_local_vals[1]),
-    ];
-
     entry.set_proc_contents(
         vec![
             SedInstruction::Sed(SedCode("s/.*/~init~init/".to_string())), //ローカル変数の初期化
             SedInstruction::ConstVal(ConstVal::new("hello")),
-            SedInstruction::Set(&sed_values[0]),
+            SedInstruction::Set(&entry_local_vals[0]),
             SedInstruction::ConstVal(ConstVal::new("Tom")),
-            SedInstruction::Set(&sed_values[1]),
+            SedInstruction::Set(&entry_local_vals[1]),
             SedInstruction::LocalVal(&entry_local_vals[0]), // L0
             SedInstruction::ConstVal(ConstVal::new("world")),
             SedInstruction::LocalVal(&entry_local_vals[1]), // L1
             SedInstruction::Call(CallFunc::new("strjoin3")),
-            SedInstruction::Set(&sed_values[0]),
+            SedInstruction::Set(&entry_local_vals[0]),
             SedInstruction::LocalVal(&entry_local_vals[0]), // L0
-            SedInstruction::Set(&sed_values[1]),
+            SedInstruction::Set(&entry_local_vals[1]),
         ]
     );
 
@@ -311,10 +306,6 @@ pub fn gen_test_proc03() -> String
     let func_add_local_vals:Vec<LocalVal> = vec![
         LocalVal::new(0)
     ];
-
-    let sed_values_add = vec![
-        SedValue::LocalVal(&func_add_local_vals[0]),
-    ];
     // 関数の内容を定義する
 
     func_strjoin.set_proc_contents(
@@ -323,7 +314,7 @@ pub fn gen_test_proc03() -> String
             // local変数は未初期化
 
             SedInstruction::ConstVal(ConstVal::new("hello hello hello hello")),
-            SedInstruction::Set(&sed_values_add[0]), // 関数内のローカル変数に値を代入する
+            SedInstruction::Set(&func_add_local_vals[0]), // 関数内のローカル変数に値を代入する
 
             //                             |<---------argc----------->|<---localc--->|
             SedInstruction::Sed(SedCode("s/~\\([^\\~]*\\)~\\([^\\~]*\\)~\\([^\\~]*\\)/~\\1\\2;/".to_string())),
@@ -386,25 +377,20 @@ pub fn gen_test_proc04() -> String
         LocalVal::new(1), // L1
     ]; // entryのローカル変数
 
-    let sed_values: Vec<SedValue> = vec![
-        SedValue::LocalVal(&entry_local_vals[0]),
-        SedValue::LocalVal(&entry_local_vals[1]),
-    ];
-
     entry.set_proc_contents(
         vec![
             SedInstruction::Sed(SedCode("s/.*/~init~init/".to_string())), //ローカル変数の初期化
             SedInstruction::ConstVal(ConstVal::new("101101110")),
-            SedInstruction::Set(&sed_values[0]),
+            SedInstruction::Set(&entry_local_vals[0]),
             SedInstruction::ConstVal(ConstVal::new("11101110111")),
-            SedInstruction::Set(&sed_values[1]),
+            SedInstruction::Set(&entry_local_vals[1]),
             SedInstruction::LocalVal(&entry_local_vals[0]), // L0
             SedInstruction::ConstVal(ConstVal::new("111")),
             SedInstruction::LocalVal(&entry_local_vals[1]), // L1
             SedInstruction::Call(CallFunc::new("add3")),
-            SedInstruction::Set(&sed_values[0]),
+            SedInstruction::Set(&entry_local_vals[0]),
             SedInstruction::LocalVal(&entry_local_vals[0]), // L0
-            SedInstruction::Set(&sed_values[1]),
+            SedInstruction::Set(&entry_local_vals[1]),
         ]
     );
 
@@ -418,9 +404,6 @@ pub fn gen_test_proc04() -> String
         LocalVal::new(0)
     ];
 
-    let sed_values_add = vec![
-        SedValue::LocalVal(&func_add_local_vals[0]),
-    ];
     // 関数の内容を定義する
 
     func_add.set_proc_contents(
@@ -499,21 +482,16 @@ fn gen_test_proc05() -> String {
         LocalVal::new(1), // L1
     ]; // entryのローカル変数
 
-    let sed_values: Vec<SedValue> = vec![
-        SedValue::LocalVal(&entry_local_vals[0]),
-        SedValue::LocalVal(&entry_local_vals[1]),
-    ];
-
     entry.set_proc_contents(
         vec![
             SedInstruction::Sed(SedCode("s/.*/~init~init/".to_string())), //ローカル変数の初期化
             SedInstruction::ConstVal(ConstVal::new("101101110")),
-            SedInstruction::Set(&sed_values[0]),
+            SedInstruction::Set(&entry_local_vals[0]),
             SedInstruction::ConstVal(ConstVal::new("11101110111")),
-            SedInstruction::Set(&sed_values[1]),
+            SedInstruction::Set(&entry_local_vals[1]),
             SedInstruction::LocalVal(&entry_local_vals[0]), // L0
             SedInstruction::Call(CallFunc::new("if_test")),
-            SedInstruction::Set(&sed_values[0])
+            SedInstruction::Set(&entry_local_vals[0])
         ]
     );
 
@@ -526,10 +504,6 @@ fn gen_test_proc05() -> String {
         LocalVal::new(0)
     ];
 
-    let func_if_test_sed_values: Vec<SedValue> = vec![
-        SedValue::LocalVal(&func_if_test_local_vals[0]),
-    ];
-
     // 関数の内容を定義する
 
     func_if_test.set_proc_contents(
@@ -540,11 +514,11 @@ fn gen_test_proc05() -> String {
             SedInstruction::IfProc(IfProc::new(
                 vec![
                     SedInstruction::ConstVal(ConstVal::new("Hello")),
-                    SedInstruction::Set(&func_if_test_sed_values[0]),
+                    SedInstruction::Set(&func_if_test_local_vals[0]),
                 ],
                 vec![
                     SedInstruction::ConstVal(ConstVal::new("World")),
-                    SedInstruction::Set(&func_if_test_sed_values[0]),
+                    SedInstruction::Set(&func_if_test_local_vals[0]),
                 ]
             )),
             SedInstruction::LocalVal(&func_if_test_local_vals[0]),
@@ -591,22 +565,18 @@ pub fn gen_test_proc06() -> String
         LocalVal::new(1), // L1
     ]; // entryのローカル変数
 
-    let sed_values: Vec<SedValue> = vec![
-        SedValue::LocalVal(&entry_local_vals[0]),
-        SedValue::LocalVal(&entry_local_vals[1]),
-    ];
 
     entry.set_proc_contents(
         vec![
             SedInstruction::Sed(SedCode("s/.*/~init~init/".to_string())), //ローカル変数の初期化
             SedInstruction::ConstVal(ConstVal::new("101101110")),
-            SedInstruction::Set(&sed_values[0]),
+            SedInstruction::Set(&entry_local_vals[0]),
             SedInstruction::ConstVal(ConstVal::new("11101110111")),
-            SedInstruction::Set(&sed_values[1]),
+            SedInstruction::Set(&entry_local_vals[1]),
             SedInstruction::LocalVal(&entry_local_vals[0]), // L0
             SedInstruction::LocalVal(&entry_local_vals[1]), // L0
             SedInstruction::Call(CallFunc::new("mul")),
-            SedInstruction::Set(&sed_values[0])
+            SedInstruction::Set(&entry_local_vals[0])
         ]
     );
 
@@ -667,10 +637,6 @@ pub fn gen_test_proc06() -> String
         LocalVal::new(0)
     ];
 
-    let func_if_test_sed_values: Vec<SedValue> = vec![
-        SedValue::LocalVal(&func_if_test_local_vals[0]), // rstr
-    ];
-
     func_mul.set_proc_contents(
         vec![
             SedInstruction::ArgVal(&func_if_test_arg_vals[1]), // b
@@ -678,7 +644,7 @@ pub fn gen_test_proc06() -> String
             SedInstruction::IfProc(IfProc::new(
                 vec![
                     SedInstruction::ConstVal(ConstVal::new("0")),
-                    SedInstruction::Set(&func_if_test_sed_values[0]), // rstr
+                    SedInstruction::Set(&func_if_test_local_vals[0]), // rstr
                 ],
                 vec![
                     SedInstruction::ArgVal(&func_if_test_arg_vals[1]),
@@ -691,7 +657,7 @@ pub fn gen_test_proc06() -> String
                             SedInstruction::ArgVal(&func_if_test_arg_vals[1]), // b
                             SedInstruction::Call(CallFunc::new("shift_right1")),
                             SedInstruction::Call(CallFunc::new("mul")),
-                            SedInstruction::Set(&func_if_test_sed_values[0]), // rstr
+                            SedInstruction::Set(&func_if_test_local_vals[0]), // rstr
                         ],
                         vec![
                             // rstr = add(a, mul(shift_left1(a), shift_right1(b)))
@@ -702,7 +668,7 @@ pub fn gen_test_proc06() -> String
                             SedInstruction::Call(CallFunc::new("mul")),
                             SedInstruction::ArgVal(&func_if_test_arg_vals[0]), // a
                             SedInstruction::Call(CallFunc::new("add")),
-                            SedInstruction::Set(&func_if_test_sed_values[0]),  // rstr
+                            SedInstruction::Set(&func_if_test_local_vals[0]),  // rstr
                         ]
                     )),
                 ]

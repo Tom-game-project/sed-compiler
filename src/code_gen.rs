@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use std::ops::{Deref, DerefMut};
 use std::marker::PhantomData;
 
@@ -89,21 +90,12 @@ pub enum SedInstruction <'a>{
     ConstVal(ConstVal),
     /// 関数をよびスタックを関数の引数分消費して
     /// 返り値をスタックに積む
-    Call(CallFunc), // calling function
-    Set(&'a SedValue<'a>),
+    Call(CallFunc),
+    Set(&'a dyn ResolvePopAndSetProc),
     /// func_def.retc分スタックを消費して値を返却する
     Ret,
     /// スタックのtopの値によって条件分岐
     IfProc(IfProc<'a>)
-}
-
-/// |... ArgVal ...|... LocalVal...|[... stack zone ...]
-///  <---------fixed size -------->| <--  flex size -->
-/// 返り値
-#[derive(Debug)]
-pub enum SedValue <'a>{
-    ArgVal(&'a ArgVal),
-    LocalVal(&'a LocalVal)
 }
 
 #[derive(Debug)]
@@ -424,6 +416,27 @@ impl<'a> SetLocalc for IfProc <'a>{
     }
 }
 
+// 引数とローカル変数
+
+/// |... ArgVal ...|... LocalVal...|[... stack zone ...]
+///  <---------fixed size -------->| <--  flex size -->
+/// 返り値
+pub trait ResolvePopAndSetProc:Debug {
+    fn resolve_pop_and_set_proc(&self, stack_size:usize, func_def: &FuncDef) -> String;
+}
+
+impl ResolvePopAndSetProc for ArgVal {
+    fn resolve_pop_and_set_proc(&self, stack_size:usize, _func_def: &FuncDef) -> String {
+        resolve_pop_and_set_proc(stack_size, self.id)
+    }
+}
+
+impl ResolvePopAndSetProc for LocalVal {
+    fn resolve_pop_and_set_proc(&self, stack_size:usize, func_def: &FuncDef) -> String {
+        resolve_pop_and_set_proc(stack_size, func_def.argc + self.id)
+    }
+}
+
 // =========================================================================================
 //                                 ここまで 共通実装
 // =========================================================================================
@@ -556,7 +569,7 @@ fn resolve_pop_and_set_proc(stack_size:usize, offset:usize) -> String
 /// 
 fn resolve_set_instruction(
     rstr: &mut String,
-    a: &SedValue,
+    a: & dyn ResolvePopAndSetProc,
     func_def: &FuncDef,
     fixed_offset:usize,
     mut stack_size:usize) -> Result<usize, CompileErr>
@@ -568,15 +581,7 @@ fn resolve_set_instruction(
     if stack_size <= fixed_offset {
         return Err(CompileErr::StackUnderFlow(format!("stack_size: {}, fixed_offset: {}", stack_size, fixed_offset)));
     }
-    match a {
-        // TODO index関係のエラー処理
-        SedValue::ArgVal(arg_a) => {
-            rstr.push_str(&resolve_pop_and_set_proc(stack_size, arg_a.id));
-        }
-        SedValue::LocalVal(loc_a) => {
-            rstr.push_str(&resolve_pop_and_set_proc(stack_size, func_def.argc + loc_a.id));
-        }
-    }
+    rstr.push_str(&a.resolve_pop_and_set_proc(stack_size, func_def));
     stack_size -= 1;
     Ok(stack_size)
 }
@@ -660,7 +665,7 @@ fn resolve_instructions(
             SedInstruction::ArgVal(a)=> resolve_argval_instruction(rstr, a, stack_size),
             SedInstruction::LocalVal(a) => resolve_localval_instruction(rstr, a, func_def, stack_size),
             SedInstruction::ConstVal(a)=> resolve_constval_instruction(rstr, a, stack_size),
-            SedInstruction::Set(a) => resolve_set_instruction(rstr, a, func_def, fixed_offset, stack_size)?,
+            SedInstruction::Set(a) => resolve_set_instruction( rstr, *a, func_def, fixed_offset, stack_size)?,
             SedInstruction::Ret => resolve_ret_instructions(rstr, func_def, stack_size, fixed_offset)?,
             SedInstruction::IfProc(a) => resolve_if_instructions(rstr, a, func_def, stack_size, func_table)?,
         };
