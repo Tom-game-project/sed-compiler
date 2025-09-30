@@ -108,9 +108,12 @@ pub fn gen_test_proc00() -> String {
         ]
     );
 
-    let mut func_table = vec![entry, func_pow];
-    assemble_funcs(&mut func_table);
-    if let Ok(code) = sedgen_func_table(&func_table) {
+    let compile_result = CompilerBuilder::new()
+        .add_func(entry)
+        .add_func(func_pow)
+        .assemble()
+        .generate();
+    if let Ok(code) = compile_result {
         //println!("{}", code);
         code
     }
@@ -170,9 +173,12 @@ pub fn gen_test_proc01() -> String
         ]
     );
 
-    let mut func_table = vec![entry, func_add];
-    assemble_funcs(&mut func_table);
-    if let Ok(code) = sedgen_func_table(&func_table) {
+    let compile_result = CompilerBuilder::new()
+        .add_func(entry)
+        .add_func(func_add)
+        .assemble()
+        .generate();
+    if let Ok(code) = compile_result {
         // println!("{}", code);
         code
     }
@@ -240,9 +246,13 @@ pub fn gen_test_proc02() -> String
         ]
     );
 
-    let mut func_table = vec![entry, func_add, func_add3];
-    assemble_funcs(&mut func_table);
-    if let Ok(code) = sedgen_func_table(&func_table) {
+    let compile_result = CompilerBuilder::new()
+        .add_func(entry)
+        .add_func(func_add)
+        .add_func(func_add3)
+        .assemble()
+        .generate();
+    if let Ok(code) = compile_result {
         // println!("{}", code);
         code
     }
@@ -341,9 +351,13 @@ pub fn gen_test_proc03() -> String
         ]
     );
 
-    let mut func_table = vec![entry, func_strjoin, func_strjoin3];
-    assemble_funcs(&mut func_table);
-    if let Ok(code) = sedgen_func_table(&func_table) {
+    let compile_result = CompilerBuilder::new()
+        .add_func(entry)
+        .add_func(func_strjoin)
+        .add_func(func_strjoin3)
+        .assemble()
+        .generate();
+    if let Ok(code) = compile_result{
         // println!("{}", code);
         code
     }
@@ -455,9 +469,13 @@ pub fn gen_test_proc04() -> String
 
     // ===========================================================
 
-    let mut func_table = vec![entry, func_add, func_add3];
-    assemble_funcs(&mut func_table);
-    if let Ok(code) = sedgen_func_table(&func_table) {
+    let compile_result = CompilerBuilder::new()
+        .add_func(entry)
+        .add_func(func_add)
+        .add_func(func_add3)
+        .assemble()
+        .generate();
+    if let Ok(code) = compile_result {
         // println!("{}", code);
         code
     }
@@ -534,9 +552,12 @@ fn gen_test_proc05() -> String {
         ]
     );
 
-    let mut func_table = vec![entry, func_if_test];
-    assemble_funcs(&mut func_table);
-    if let Ok(code) = sedgen_func_table(&func_table) {
+    let compile_result = CompilerBuilder::new()
+        .add_func(entry)
+        .add_func(func_if_test)
+        .assemble()
+        .generate();
+    if let Ok(code) = compile_result {
         // println!("{}", code);
         code
     }
@@ -692,17 +713,17 @@ pub fn gen_test_proc06() -> String
         ]
     );
 
-    let mut func_table = vec![
-        entry,
-        func_mul, 
-        func_add,
-        func_is_empty,
-        func_shift_left1,
-        func_shift_right1,
-        func_ends_with_zero,
-    ];
-    assemble_funcs(&mut func_table);
-    let compile_result = sedgen_func_table(&func_table);
+    let compile_result = CompilerBuilder::new()
+        .add_func(entry)
+        .add_func(func_mul)
+        .add_func(func_add)
+        .add_func(func_is_empty)
+        .add_func(func_shift_left1)
+        .add_func(func_shift_right1)
+        .add_func(func_ends_with_zero)
+        .assemble()
+        .generate();
+
     let mut rcode:String = String::from("");
     if let Ok(code) = &compile_result
     {

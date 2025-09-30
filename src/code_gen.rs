@@ -1,4 +1,48 @@
 use std::ops::{Deref, DerefMut};
+use std::marker::PhantomData;
+
+// compiler state
+pub struct Unassembled;
+pub struct Assembled;
+
+pub struct CompilerBuilder<'a, State> {
+    func_table: Vec<FuncDef<'a>>,
+    _state: PhantomData<State>,
+}
+
+impl<'a> CompilerBuilder<'a, Unassembled> {
+    pub fn new() -> Self {
+        Self {
+            func_table: Vec::new(),
+            _state: PhantomData,
+        }
+    }
+
+    /// 関数定義を一つ追加する
+    pub fn add_func(mut self, func: FuncDef<'a>) -> Self {
+        self.func_table.push(func);
+        self
+    }
+
+    /// 「組立」処理を実行し、状態を Assembled に遷移させる
+    pub fn assemble(mut self) -> CompilerBuilder<'a, Assembled> {
+        // ID割り当て、オフセット計算、ラベル解決など
+        assemble_funcs(&mut self.func_table);
+        CompilerBuilder {
+            func_table: self.func_table,
+            _state: PhantomData,
+        }
+    }
+}
+
+// この型はすでにassembleを実行している状態のビルダー
+impl<'a> CompilerBuilder<'a, Assembled> {
+    /// sedコードを生成する
+    pub fn generate(self) -> Result<String, CompileErr> {
+        println!("Generating sed code...");
+        sedgen_func_table(&self.func_table)
+    }
+}
 
 /// この関数を使ってreturnアドレスを保存する
 #[derive(Debug)]
@@ -583,16 +627,12 @@ fn resolve_if_instructions(
     rstr.push_str(&format!("
 t{reset_flag}
 :{reset_flag}
-
 s/\\(.*\\)~[0]\\+$/\\1/
-
 t {else_label}
 b {then_label}
-
 :{then_label}
 s/\\(.*\\)~\\([^\\~]*\\)\\+$/\\1/
 {then_code}
-
 b {endif_label}
 :{else_label}
 {else_code}
@@ -710,7 +750,7 @@ s/\\n\\(.*\\)/\\1/
 
 
 /// この関数を呼び出す前に必ずassemble_funcsを実行しfunc_tableの設定を終わらせる必要がある
-pub fn sedgen_func_table(func_table:&[FuncDef]) -> Result<String, CompileErr>
+fn sedgen_func_table(func_table:&[FuncDef]) -> Result<String, CompileErr>
 {
     let mut rstr = "".to_string();
     for i in func_table{
@@ -744,7 +784,7 @@ fn resolve_if_label(proc_contents: &mut Vec<SedInstruction>, mut min_id: usize) 
 /// 関数を集めて、
 /// return アドレス(ラベル)、
 /// 関数のラベルも解決する
-pub fn assemble_funcs(func_table:&mut [FuncDef]){
+fn assemble_funcs(func_table:&mut [FuncDef]){
     let mut pad = 0;
     let mut label_id = 0;
     for i in & mut *func_table{
