@@ -1,7 +1,8 @@
 // compileが成功するものは、それらの成果物が予想通りの挙動を示すかテストする
 // main.rs や lib.rs と同じ階層、またはテスト用のモジュール内に記述します
 mod gen_test;
-use gen_test::*;
+
+
 #[cfg(test)]
 mod command_test {
     use std::process::Command;

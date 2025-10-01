@@ -6,12 +6,12 @@ use std::marker::PhantomData;
 pub struct Unassembled;
 pub struct Assembled;
 
-pub struct CompilerBuilder<'a, State> {
-    func_table: Vec<FuncDef<'a>>,
+pub struct CompilerBuilder<State> {
+    func_table: Vec<FuncDef>,
     _state: PhantomData<State>,
 }
 
-impl<'a> CompilerBuilder<'a, Unassembled> {
+impl<'a> CompilerBuilder<Unassembled> {
     pub fn new() -> Self {
         Self {
             func_table: Vec::new(),
@@ -20,13 +20,13 @@ impl<'a> CompilerBuilder<'a, Unassembled> {
     }
 
     /// 関数定義を一つ追加する
-    pub fn add_func(mut self, func: FuncDef<'a>) -> Self {
+    pub fn add_func(mut self, func: FuncDef) -> Self {
         self.func_table.push(func);
         self
     }
 
     /// 「組立」処理を実行し、状態を Assembled に遷移させる
-    pub fn assemble(mut self) -> CompilerBuilder<'a, Assembled> {
+    pub fn assemble(mut self) -> CompilerBuilder<Assembled> {
         // ID割り当て、オフセット計算、ラベル解決など
         assemble_funcs(&mut self.func_table);
         CompilerBuilder {
@@ -37,7 +37,7 @@ impl<'a> CompilerBuilder<'a, Unassembled> {
 }
 
 // この型はすでにassembleを実行している状態のビルダー
-impl<'a> CompilerBuilder<'a, Assembled> {
+impl CompilerBuilder<Assembled> {
     /// sedコードを生成する
     pub fn generate(self) -> Result<String, CompileErr> {
         println!("Generating sed code...");
@@ -62,53 +62,56 @@ impl ReturnAddrMarker {
 pub struct SedCode(pub String);
 
 #[derive(Debug)]
-struct SedProgram<'a>(Vec<SedInstruction<'a>>);
+struct SedProgram(Vec<SedInstruction>);
 
-impl<'a> Deref for SedProgram<'a> {
-    type Target = Vec<SedInstruction<'a>>;
+impl Deref for SedProgram {
+    type Target = Vec<SedInstruction>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl<'a> DerefMut for SedProgram<'a> {
+impl DerefMut for SedProgram {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
 #[derive(Debug)]
-pub enum SedInstruction <'a>{
+pub enum SedInstruction{
     /// 生のSedプログラム
     Sed(SedCode),
-    /// スタックに引数を積む
-    ArgVal(&'a ArgVal),
-    /// スタックにローカル引数を積む
-    LocalVal(&'a LocalVal),
+    Val(Value),
     /// スタックに定数を積む
     ConstVal(ConstVal),
     /// 関数をよびスタックを関数の引数分消費して
     /// 返り値をスタックに積む
     Call(CallFunc),
-    Set(&'a dyn ResolvePopAndSetProc),
+    Set(Value),
     /// func_def.retc分スタックを消費して値を返却する
     Ret,
     /// スタックのtopの値によって条件分岐
-    IfProc(IfProc<'a>)
+    IfProc(IfProc)
 }
 
 #[derive(Debug)]
-pub struct IfProc <'a>{
-    id:usize, // ラベルを決定するために使う
-    then_proc: SedProgram<'a>,
-    else_proc: SedProgram<'a>,
+pub enum Value {
+    Arg(usize),
+    Local(usize)
 }
 
-impl<'a> IfProc<'a> {
+#[derive(Debug)]
+pub struct IfProc {
+    id:usize, // ラベルを決定するために使う
+    then_proc: SedProgram,
+    else_proc: SedProgram,
+}
+
+impl IfProc{
     pub fn new(
-        then_proc:Vec<SedInstruction<'a>>,
-        else_proc:Vec<SedInstruction<'a>>,
+        then_proc:Vec<SedInstruction>,
+        else_proc:Vec<SedInstruction>,
     ) -> Self {
         Self { id: 0, then_proc: SedProgram(then_proc), else_proc: SedProgram(else_proc) }
     }
@@ -153,17 +156,19 @@ impl ConstVal {
 }
 
 #[derive(Debug)]
-pub struct FuncDef <'a>{
+pub struct FuncDef{
     name: String, // 
     id: usize,
     argc: usize,  // 引数の個数
     localc: usize,// ローカル変数の個数
     retc: usize,  // 返り値の個数
     return_addr_offset: ReturnAddrMarker,
-    proc_contents: SedProgram<'a>
+    proc_contents: SedProgram,
+    arg_list: Vec<ArgVal>,
+    local_list: Vec<LocalVal>,
 }
 
-impl <'a>FuncDef <'a>{
+impl FuncDef{
     pub fn new(name:String, argc: usize, localc: usize, retc: usize) -> Self{
         FuncDef {
             name: name,
@@ -172,16 +177,17 @@ impl <'a>FuncDef <'a>{
             localc,
             retc,
             return_addr_offset: ReturnAddrMarker(0),
-            proc_contents: SedProgram(vec![])
+            proc_contents: SedProgram(vec![]),
+            arg_list: (0..argc).map(ArgVal::new).collect(),
+            local_list: (0..localc).map(LocalVal::new).collect(),
         }
     }
 
     /// 関数の内容がセットされ、更に,callにはreturn_addr_markerが0から1ずつインクリメントして設定される
-    pub fn set_proc_contents(&mut self, proc_contents: Vec<SedInstruction<'a>>) -> usize {
+    pub fn set_proc_contents(&mut self, proc_contents: Vec<SedInstruction>) -> usize {
         self.proc_contents = SedProgram(proc_contents);
-        let mut counter = 0;
-        counter = self.setup_proc_contents(counter);
-        counter
+        let counter = 0;
+        self.setup_proc_contents(counter)
     }
 
     fn get_funclabel(&self)  -> String {
@@ -231,7 +237,7 @@ trait  ReturnAddrOffsetResolver{
     fn set_return_addr_offset(&mut self, offset: usize) -> usize;
 }
 
-impl<'a> ReturnAddrOffsetResolver for SedProgram<'a> {
+impl ReturnAddrOffsetResolver for SedProgram {
     fn setup_proc_contents(&mut self, mut counter: usize) -> usize {
         for i in &mut **self {
             if let SedInstruction::Call(f) = i{
@@ -260,7 +266,7 @@ impl<'a> ReturnAddrOffsetResolver for SedProgram<'a> {
     }
 }
 
-impl<'a> ReturnAddrOffsetResolver for FuncDef <'a>{
+impl ReturnAddrOffsetResolver for FuncDef{
     fn setup_proc_contents(&mut self, counter: usize) -> usize {
         self.proc_contents.setup_proc_contents(counter)
     }
@@ -271,7 +277,7 @@ impl<'a> ReturnAddrOffsetResolver for FuncDef <'a>{
     }
 }
 
-impl<'a> ReturnAddrOffsetResolver for IfProc<'a> {
+impl ReturnAddrOffsetResolver for IfProc {
     fn setup_proc_contents(&mut self, mut counter: usize) -> usize {
         counter = self.then_proc.setup_proc_contents(counter);
         counter = self.else_proc.setup_proc_contents(counter);
@@ -310,7 +316,7 @@ trait SedgenReturnDispatcher {
     ) -> Result<String, CompileErr>;
 }
 
-impl<'a> SedgenReturnDispatcher for SedProgram<'a> {
+impl SedgenReturnDispatcher for SedProgram {
     fn sedgen_return_dispatcher(
             &self,
             func_table:&[FuncDef]
@@ -372,7 +378,7 @@ impl SedgenReturnDispatcher for CallFunc{
     }
 }
 
-impl<'a> SedgenReturnDispatcher for IfProc<'a>{
+impl SedgenReturnDispatcher for IfProc{
     fn sedgen_return_dispatcher(&self, func_table: &[FuncDef]) -> Result<String, CompileErr> {
         let mut rstr:String = String::from("");
         rstr.push_str(&self.then_proc.sedgen_return_dispatcher(func_table)?);
@@ -386,7 +392,7 @@ trait SetLocalc {
 }
 
 
-impl<'a> SetLocalc for SedProgram <'a>{
+impl SetLocalc for SedProgram {
     fn set_localc(&mut self, localc: usize) {
         for j in &mut **self {
             if let SedInstruction::Call(call_func) = j {
@@ -409,7 +415,7 @@ impl SetLocalc for CallFunc {
     }
 }
 
-impl<'a> SetLocalc for IfProc <'a>{
+impl SetLocalc for IfProc {
     fn set_localc(&mut self, localc: usize) {
         self.then_proc.set_localc(localc);
         self.else_proc.set_localc(localc);
@@ -442,7 +448,7 @@ impl ResolvePopAndSetProc for LocalVal {
 // =========================================================================================
 
 /// func_tableから名前の一致する関数を探し出す
-fn find_function_definition_by_name<'a>(name: &str, func_table:&'a [FuncDef]) -> Result<&'a FuncDef<'a>, CompileErr>
+fn find_function_definition_by_name<'a>(name: &str, func_table:&'a [FuncDef]) -> Result<&'a FuncDef, CompileErr>
 {
     if let Some(func_def) = 
         func_table
@@ -662,10 +668,22 @@ fn resolve_instructions(
         stack_size = match instruction {
             SedInstruction::Sed(sed) => resolve_sed_instruction(rstr, sed, stack_size),
             SedInstruction::Call(func_call) => resolve_call_instruction(rstr, func_call, func_table, stack_size)?,
-            SedInstruction::ArgVal(a)=> resolve_argval_instruction(rstr, a, stack_size),
-            SedInstruction::LocalVal(a) => resolve_localval_instruction(rstr, a, func_def, stack_size),
+            //SedInstruction::ArgVal(a)=> resolve_argval_instruction(rstr, &func_def.arg_list[*a], stack_size),
+            //SedInstruction::LocalVal(a) => resolve_localval_instruction(rstr, &func_def.local_list[*a], func_def, stack_size),
+            SedInstruction::Val(a) => {
+                match *a {
+                    Value::Arg(index) => resolve_argval_instruction(rstr, &func_def.arg_list[index], stack_size),
+                    Value::Local(index) =>  resolve_localval_instruction(rstr, &func_def.local_list[index], func_def, stack_size),
+                }
+            }
             SedInstruction::ConstVal(a)=> resolve_constval_instruction(rstr, a, stack_size),
-            SedInstruction::Set(a) => resolve_set_instruction( rstr, *a, func_def, fixed_offset, stack_size)?,
+            SedInstruction::Set(a) => {
+                resolve_set_instruction(rstr, 
+                match *a {
+                    Value::Local(index) => &func_def.local_list[index],
+                    Value::Arg(index) => &func_def.arg_list[index]
+                }, func_def, fixed_offset, stack_size)?
+            }
             SedInstruction::Ret => resolve_ret_instructions(rstr, func_def, stack_size, fixed_offset)?,
             SedInstruction::IfProc(a) => resolve_if_instructions(rstr, a, func_def, stack_size, func_table)?,
         };
