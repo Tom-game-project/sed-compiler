@@ -9,7 +9,7 @@
 //    #[test]
 //    fn gen_test00() {
 //        let mut file = File::create("./sed/labo6.sed")
-//            .expect("ファイルが開けませんでした");  
+//            .expect("ファイルが開けませんでした");
 //        let a = gen_test_proc00();
 //        file.write_all(a.as_bytes())
 //            .expect("書き込みに失敗しました");
@@ -18,7 +18,7 @@
 //    #[test]
 //    fn gen_test01() {
 //        let mut file = File::create("./sed/labo6.sed")
-//            .expect("ファイルが開けませんでした");  
+//            .expect("ファイルが開けませんでした");
 //        let a = gen_test_proc01();
 //        file.write_all(a.as_bytes())
 //            .expect("書き込みに失敗しました");
@@ -27,7 +27,7 @@
 //    #[test]
 //    fn gen_test02() {
 //        let mut file = File::create("./sed/labo6.sed")
-//            .expect("ファイルが開けませんでした");  
+//            .expect("ファイルが開けませんでした");
 //        let a = gen_test_proc02();
 //        file.write_all(a.as_bytes())
 //            .expect("書き込みに失敗しました");
@@ -36,7 +36,7 @@
 //    #[test]
 //    fn gen_test03() {
 //        let mut file = File::create("./sed/strjoin.sed")
-//            .expect("ファイルが開けませんでした");  
+//            .expect("ファイルが開けませんでした");
 //        let a = gen_test_proc03();
 //        file.write_all(a.as_bytes())
 //            .expect("書き込みに失敗しました");
@@ -45,7 +45,7 @@
 //    #[test]
 //    fn gen_test04() {
 //        let mut file = File::create("./sed/num_add.sed")
-//            .expect("ファイルが開けませんでした");  
+//            .expect("ファイルが開けませんでした");
 //        let a = gen_test_proc04();
 //        file.write_all(a.as_bytes())
 //            .expect("書き込みに失敗しました");
@@ -54,7 +54,7 @@
 //    #[test]
 //    fn gen_test05() {
 //        let mut file = File::create("./sed/if_example.sed")
-//            .expect("ファイルが開けませんでした");  
+//            .expect("ファイルが開けませんでした");
 //        let a = gen_test_proc05();
 //        file.write_all(a.as_bytes())
 //            .expect("書き込みに失敗しました");
@@ -64,7 +64,7 @@
 //    #[test]
 //    fn gen_test06() {
 //        let mut file = File::create("./sed/mul.sed")
-//            .expect("ファイルが開けませんでした");  
+//            .expect("ファイルが開けませんでした");
 //        let a = gen_test_proc06();
 //        file.write_all(a.as_bytes())
 //            .expect("書き込みに失敗しました");
@@ -75,7 +75,7 @@
 //pub fn gen_test_proc00() -> String {
 //    // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
 //    let mut entry = FuncDef::new("entry".to_string(), 0, 2, 1);
-//    let mut func_pow = FuncDef::new("pow".to_string(), 2, 1, 1); 
+//    let mut func_pow = FuncDef::new("pow".to_string(), 2, 1, 1);
 //    let mut func_add = FuncDef::new("add".to_string(), 2, 1, 1);
 //
 //    let local_vals = vec![
@@ -135,7 +135,7 @@
 ///// local.get l1
 ///// add
 ///// add
-///// 
+/////
 //pub fn gen_test_proc01() -> String
 //{
 //    // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
@@ -337,7 +337,7 @@
 //    }
 //}
 //
-//pub fn gen_test_proc04() -> String 
+//pub fn gen_test_proc04() -> String
 //{
 //    // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
 //    let mut entry = FuncDef::new("entry".to_string(), 0, 2, 1);
@@ -510,7 +510,7 @@
 //
 ///// mul関数のテスト
 ///// 再帰的に定義したmul関数をコンパイル
-//pub fn gen_test_proc06() -> String 
+//pub fn gen_test_proc06() -> String
 //{
 //    // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
 //    let mut entry = FuncDef::new("entry".to_string(), 0, 2, 1);
@@ -638,7 +638,7 @@
 //                ]
 //            )),
 //            // return rstr;
-//            SedInstruction::LocalVal(0), 
+//            SedInstruction::LocalVal(0),
 //            SedInstruction::Ret,
 //        ]
 //    );
