@@ -1,7 +1,7 @@
 use crate::code_gen::*;
 
 pub fn em_shift_left1() -> FuncDef {
-    let mut func_shift_left1 = FuncDef::new("shift_left1".to_string(), 1, 0, 1);
+    let mut func_shift_left1 = FuncDef::new("shift_left1", 1, 0, 1);
     func_shift_left1.set_proc_contents(vec![SedInstruction::Sed(SedCode(
         "s/\\(~[01]*\\)/\\10;/".to_string(),
     ))]);
@@ -9,7 +9,7 @@ pub fn em_shift_left1() -> FuncDef {
 }
 
 pub fn em_shift_right1() -> FuncDef {
-    let mut func_shift_right1 = FuncDef::new("shift_right1".to_string(), 1, 0, 1);
+    let mut func_shift_right1 = FuncDef::new("shift_right1", 1, 0, 1);
     func_shift_right1.set_proc_contents(vec![SedInstruction::Sed(SedCode(
         "s/\\(~[01]*\\)[01]/\\1;/".to_string(),
     ))]);
@@ -17,7 +17,7 @@ pub fn em_shift_right1() -> FuncDef {
 }
 
 pub fn em_is_empty() -> FuncDef {
-    let mut func_is_empty = FuncDef::new("is_empty".to_string(), 1, 0, 1);
+    let mut func_is_empty = FuncDef::new("is_empty", 1, 0, 1);
     func_is_empty.set_proc_contents(vec![
         SedInstruction::Sed(SedCode("s/~$/T/   ".to_string())),
         SedInstruction::Sed(SedCode("s/~.*$/F/ ".to_string())),
@@ -28,7 +28,7 @@ pub fn em_is_empty() -> FuncDef {
 }
 
 pub fn em_ends_with_zero() -> FuncDef {
-    let mut func_ends_with_zero = FuncDef::new("ends_with_zero".to_string(), 1, 0, 1);
+    let mut func_ends_with_zero = FuncDef::new("ends_with_zero", 1, 0, 1);
     func_ends_with_zero.set_proc_contents(vec![
         SedInstruction::Sed(SedCode("s/.*0$/~1;/ ".to_string())),
         SedInstruction::Sed(SedCode("s/.*1$/~0;/ ".to_string())),
@@ -43,7 +43,7 @@ pub fn em_ends_with_zero() -> FuncDef {
 /// - shift_left1
 /// - shift_right1
 pub fn em_mul() -> FuncDef {
-    let mut func_mul = FuncDef::new("mul".to_string(), 2, 1, 1);
+    let mut func_mul = FuncDef::new("mul", 2, 1, 1);
     func_mul.set_proc_contents(vec![
         SedInstruction::Val(Value::Arg(1)),
         SedInstruction::Call(CallFunc::new("is_empty")),
@@ -87,7 +87,7 @@ pub fn em_mul() -> FuncDef {
 }
 
 pub fn em_add() -> FuncDef {
-    let mut func_add = FuncDef::new("add".to_string(), 2, 0, 1);
+    let mut func_add = FuncDef::new("add", 2, 0, 1);
     func_add.set_proc_contents(
         vec![
             SedInstruction::Sed(SedCode("# 入力をaddloopの形式に変換".to_string())),

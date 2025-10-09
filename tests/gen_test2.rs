@@ -1,4 +1,4 @@
-use sed_practice::code_gen::*;
+use sed_practice::{code_gen::*, embedded::{em_add, em_mul}};
 
 #[cfg(test)]
 mod gen_test2 {
@@ -21,17 +21,25 @@ mod gen_test2 {
         file.write_all(a.as_bytes())
             .expect("書き込みに失敗しました");
     }
+
+    #[test]
+    fn gen_test02() {
+        let mut file = File::create("./sed/sub.sed").expect("ファイルが開けませんでした");
+        let a = gen_test_proc02();
+        file.write_all(a.as_bytes())
+            .expect("書き込みに失敗しました");
+    }
 }
 
 fn gen_test_proc00() -> String {
     // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
-    let mut entry = FuncDef::new("entry".to_string(), 0, 2, 1);
-    let mut func_mul = FuncDef::new("mul".to_string(), 2, 1, 1);
-    let mut func_add = FuncDef::new("add".to_string(), 2, 0, 1);
-    let mut func_shift_left1 = FuncDef::new("shift_left1".to_string(), 1, 0, 1);
-    let mut func_shift_right1 = FuncDef::new("shift_right1".to_string(), 1, 0, 1);
-    let mut func_is_empty = FuncDef::new("is_empty".to_string(), 1, 0, 1);
-    let mut func_ends_with_zero = FuncDef::new("ends_with_zero".to_string(), 1, 0, 1);
+    let mut entry = FuncDef::new("entry", 0, 2, 1);
+    let mut func_mul = FuncDef::new("mul", 2, 1, 1);
+    let mut func_add = FuncDef::new("add", 2, 0, 1);
+    let mut func_shift_left1 = FuncDef::new("shift_left1", 1, 0, 1);
+    let mut func_shift_right1 = FuncDef::new("shift_right1", 1, 0, 1);
+    let mut func_is_empty = FuncDef::new("is_empty", 1, 0, 1);
+    let mut func_ends_with_zero = FuncDef::new("ends_with_zero", 1, 0, 1);
 
     // ======================== func entry ========================
 
@@ -158,7 +166,7 @@ fn gen_test_proc00() -> String {
 fn gen_test_proc01() -> String {
     use sed_practice::embedded::*;
     // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
-    let mut entry = FuncDef::new("entry".to_string(), 0, 2, 1);
+    let mut entry = FuncDef::new("entry", 0, 2, 1);
     let func_mul = em_mul();
     let func_add = em_add();
     let func_shift_left1 = em_shift_left1();
@@ -188,6 +196,70 @@ fn gen_test_proc01() -> String {
         .add_func(func_ends_with_zero)
         .assemble()
         .generate();
+
+    match compile_result {
+        Ok(code) => code,
+        Err(e) => {
+            println!("{:?}", e);
+            "".to_string()
+        }
+    }
+}
+
+fn gen_test_proc02() -> String { 
+    let mut entry = FuncDef::new("entry", 0, 2, 1);
+    let mut twos_complement = FuncDef::new("twos_complement", 1, 0, 1);
+    let func_add = em_add();
+    let mut func_zero_padding32 = FuncDef::new("zero_padding32", 1, 0, 1);
+
+    entry.set_proc_contents(vec![
+        SedInstruction::Sed(SedCode("s/.*/~init~init/".to_string())), //ローカル変数の初期化
+        SedInstruction::ConstVal(ConstVal::new("10011011010111111")),
+        SedInstruction::Call(CallFunc::new("zero_padding32")),
+        SedInstruction::Set(Value::Local(0)),
+        SedInstruction::ConstVal(ConstVal::new("11101101")),
+        SedInstruction::Call(CallFunc::new("zero_padding32")),
+        SedInstruction::Set(Value::Local(1)),
+        SedInstruction::Val(Value::Local(0)), // L0
+        SedInstruction::Val(Value::Local(1)), // L0
+        SedInstruction::Call(CallFunc::new("twos_complement")),
+        SedInstruction::Call(CallFunc::new("add")),
+        SedInstruction::Call(CallFunc::new("zero_padding32")),
+        SedInstruction::Ret,
+        //SedInstruction::Set(Value::Local(0)),
+    ]);
+
+    twos_complement.set_proc_contents(vec![
+        SedInstruction::Sed(SedCode("
+s/~\\([^\\~]*\\)/\\1/
+y/01/10/
+s/$/+/
+:add_one_loop
+s/0+$/1/
+t add_one_done
+s/1+$/+0/
+b add_one_loop
+:add_one_done
+s/^\\+/1/
+
+s/\\(.*\\)/~\\1;/
+".to_string())),
+    ]);
+
+    func_zero_padding32.set_proc_contents(vec![
+        SedInstruction::Sed(SedCode("
+s/~\\([^\\~]*\\)/\\1/
+s/^/00000000000000000000000000000000/
+ s/.*\\(................................\\)$/~\\1;/
+".to_string())),
+    ]);
+
+    let compile_result = CompilerBuilder::new()
+        .add_func(entry)
+        .add_func(func_add)
+        .add_func(twos_complement)
+        .add_func(func_zero_padding32)
+        .assemble().generate();
 
     match compile_result {
         Ok(code) => code,

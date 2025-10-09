@@ -169,9 +169,9 @@ pub struct FuncDef {
 }
 
 impl FuncDef {
-    pub fn new(name: String, argc: usize, localc: usize, retc: usize) -> Self {
+    pub fn new(name: &str, argc: usize, localc: usize, retc: usize) -> Self {
         FuncDef {
-            name: name,
+            name: name.to_string(),
             id: 0,
             argc,
             localc,
