@@ -1,40 +1,16 @@
 s/.*/~init~init/
 s/\(~[^\~]*~[^\~]*\)/\1~10011011010111111/
-
-# function call: zero_padding32
-s/\(~[^\~]*~[^\~]*\)\(~[^\~]*\)/:retlabel0\2\1|/
-H
-b func3
-:retlabel0
 s/\(\)~[^\~]*\(~[^\~]*\)\(~[^\~]*\)/\1\3\2/
 s/\(~[^\~]*~[^\~]*\)/\1~11101101/
-
-# function call: zero_padding32
-s/\(~[^\~]*~[^\~]*\)\(~[^\~]*\)/:retlabel1\2\1|/
-H
-b func3
-:retlabel1
 s/\(~[^\~]*\)~[^\~]*\(\)\(~[^\~]*\)/\1\3\2/
 s/\(\)\(~[^\~]*\)\(~[^\~]*\)/\1\2\3\2/
 s/\(~[^\~]*\)\(~[^\~]*\)\(~[^\~]*\)/\1\2\3\2/
 
-# function call: twos_complement
-s/\(~[^\~]*~[^\~]*~[^\~]*\)\(~[^\~]*\)/:retlabel2\2\1|/
+# function call: sub32
+s/\(~[^\~]*~[^\~]*\)\(~[^\~]*~[^\~]*\)/:retlabel0\2\1|/
 H
-b func2
-:retlabel2
-
-# function call: add
-s/\(~[^\~]*~[^\~]*\)\(~[^\~]*~[^\~]*\)/:retlabel3\2\1|/
-H
-b func1
-:retlabel3
-
-# function call: zero_padding32
-s/\(~[^\~]*~[^\~]*\)\(~[^\~]*\)/:retlabel4\2\1|/
-H
-b func3
-:retlabel4
+b func4
+:retlabel0
 s/~[^\~]*~[^\~]*\(~[^\~]*\)/\1;/
 b return_dispatcher
 b done
@@ -71,9 +47,9 @@ s/~\([^\~]*\)/\1/
 y/01/10/
 s/$/+/
 :add_one_loop
-  s/0+$/1/
-  t add_one_done
-  s/1+$/+0/
+s/0+$/1/
+t add_one_done
+s/1+$/+0/
 b add_one_loop
 :add_one_done
 s/^\+/1/
@@ -88,8 +64,47 @@ s/\n\(.*\)/\1/
 
 s/~\([^\~]*\)/\1/
 s/^/00000000000000000000000000000000/
- s/.*\(................................\)$/~\1;/
+s/.*\(................................\)$/~\1;/
 
+b return_dispatcher
+:func4
+
+s/:retlabel[0-9]\+\(~[^\~]*~[^\~]*\)[^\|]*|$/\1/
+s/\n\(.*\)/\1/
+s/\(\)\(~[^\~]*\)\(~[^\~]*\)/\1\2\3\2/
+
+# function call: zero_padding32
+s/\(~[^\~]*~[^\~]*\)\(~[^\~]*\)/:retlabel1\2\1|/
+H
+b func3
+:retlabel1
+s/\(~[^\~]*\)\(~[^\~]*\)\(~[^\~]*\)/\1\2\3\2/
+
+# function call: zero_padding32
+s/\(~[^\~]*~[^\~]*~[^\~]*\)\(~[^\~]*\)/:retlabel2\2\1|/
+H
+b func3
+:retlabel2
+
+# function call: twos_complement
+s/\(~[^\~]*~[^\~]*~[^\~]*\)\(~[^\~]*\)/:retlabel3\2\1|/
+H
+b func2
+:retlabel3
+
+# function call: add
+s/\(~[^\~]*~[^\~]*\)\(~[^\~]*~[^\~]*\)/:retlabel4\2\1|/
+H
+b func1
+:retlabel4
+
+# function call: zero_padding32
+s/\(~[^\~]*~[^\~]*\)\(~[^\~]*\)/:retlabel5\2\1|/
+H
+b func3
+:retlabel5
+s/~[^\~]*~[^\~]*\(~[^\~]*\)/\1;/
+b return_dispatcher
 b return_dispatcher
 
 :return_dispatcher
@@ -100,7 +115,7 @@ s/^\(.*\)\(\n:retlabel[0-9]\+[^|]*|.*\)$/\1/
 x
 s/^\(.*\)\(\n:retlabel[0-9]\+[^|]*|.*\)$/\2/
 /^.*\n:retlabel0\+[^\|]*|.*$/ {
-s/.*\n:retlabel0~[^\~]*\(~[^\~]*~[^\|]*\)|\n\(~[^\~;]*\);$/\1\2/
+s/.*\n:retlabel0~[^\~]*~[^\~]*\(~[^\~]*~[^\|]*\)|\n\(~[^\~;]*\);$/\1\2/
 b retlabel0
 }
 /^.*\n:retlabel1\+[^\|]*|.*$/ {
@@ -112,11 +127,15 @@ s/.*\n:retlabel2~[^\~]*\(~[^\~]*~[^\|]*\)|\n\(~[^\~;]*\);$/\1\2/
 b retlabel2
 }
 /^.*\n:retlabel3\+[^\|]*|.*$/ {
-s/.*\n:retlabel3~[^\~]*~[^\~]*\(~[^\~]*~[^\|]*\)|\n\(~[^\~;]*\);$/\1\2/
+s/.*\n:retlabel3~[^\~]*\(~[^\~]*~[^\|]*\)|\n\(~[^\~;]*\);$/\1\2/
 b retlabel3
 }
 /^.*\n:retlabel4\+[^\|]*|.*$/ {
-s/.*\n:retlabel4~[^\~]*\(~[^\~]*~[^\|]*\)|\n\(~[^\~;]*\);$/\1\2/
+s/.*\n:retlabel4~[^\~]*~[^\~]*\(~[^\~]*~[^\|]*\)|\n\(~[^\~;]*\);$/\1\2/
 b retlabel4
+}
+/^.*\n:retlabel5\+[^\|]*|.*$/ {
+s/.*\n:retlabel5~[^\~]*\(~[^\~]*~[^\|]*\)|\n\(~[^\~;]*\);$/\1\2/
+b retlabel5
 }
 :done

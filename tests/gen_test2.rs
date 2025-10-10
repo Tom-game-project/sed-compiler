@@ -184,6 +184,8 @@ fn gen_test_proc01() -> String {
         SedInstruction::Val(Value::Local(1)), // L0
         SedInstruction::Call(CallFunc::new("mul")),
         SedInstruction::Set(Value::Local(0)),
+        SedInstruction::Val(Value::Local(0)),
+        SedInstruction::Ret
     ]);
 
     let compile_result = CompilerBuilder::new()
@@ -211,24 +213,30 @@ fn gen_test_proc02() -> String {
     let mut twos_complement = FuncDef::new("twos_complement", 1, 0, 1);
     let func_add = em_add();
     let mut func_zero_padding32 = FuncDef::new("zero_padding32", 1, 0, 1);
+    let mut func_sub32 = FuncDef::new("sub32", 2, 0, 1);
 
     entry.set_proc_contents(vec![
         SedInstruction::Sed(SedCode("s/.*/~init~init/".to_string())), //ローカル変数の初期化
         SedInstruction::ConstVal(ConstVal::new("10011011010111111")),
-        SedInstruction::Call(CallFunc::new("zero_padding32")),
         SedInstruction::Set(Value::Local(0)),
         SedInstruction::ConstVal(ConstVal::new("11101101")),
-        SedInstruction::Call(CallFunc::new("zero_padding32")),
         SedInstruction::Set(Value::Local(1)),
         SedInstruction::Val(Value::Local(0)), // L0
         SedInstruction::Val(Value::Local(1)), // L0
+        SedInstruction::Call(CallFunc::new("sub32")),
+        SedInstruction::Ret,
+    ]);
+
+    func_sub32.set_proc_contents(vec![
+        SedInstruction::Val(Value::Arg(0)),
+        SedInstruction::Call(CallFunc::new("zero_padding32")),
+        SedInstruction::Val(Value::Arg(1)),
+        SedInstruction::Call(CallFunc::new("zero_padding32")),
         SedInstruction::Call(CallFunc::new("twos_complement")),
         SedInstruction::Call(CallFunc::new("add")),
         SedInstruction::Call(CallFunc::new("zero_padding32")),
         SedInstruction::Ret,
-        //SedInstruction::Set(Value::Local(0)),
     ]);
-
     twos_complement.set_proc_contents(vec![
         SedInstruction::Sed(SedCode("
 s/~\\([^\\~]*\\)/\\1/
@@ -250,7 +258,7 @@ s/\\(.*\\)/~\\1;/
         SedInstruction::Sed(SedCode("
 s/~\\([^\\~]*\\)/\\1/
 s/^/00000000000000000000000000000000/
- s/.*\\(................................\\)$/~\\1;/
+s/.*\\(................................\\)$/~\\1;/
 ".to_string())),
     ]);
 
@@ -259,6 +267,7 @@ s/^/00000000000000000000000000000000/
         .add_func(func_add)
         .add_func(twos_complement)
         .add_func(func_zero_padding32)
+        .add_func(func_sub32)
         .assemble().generate();
 
     match compile_result {

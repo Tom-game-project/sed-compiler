@@ -776,10 +776,14 @@ fn assemble_funcs(func_table: &mut [FuncDef]) {
     let mut pad = 0;
     let mut label_id = 0;
     for i in &mut *func_table {
-        pad = i.set_return_addr_offset(pad);
+
+        // println!("set id {}", pad);
+        pad += i.set_return_addr_offset(pad);
+
         i.id = label_id;
         label_id += 1;
     }
+    // println!("{:#?}", func_table);
 
     // ローカル変数の解決
     for i in &mut *func_table {
