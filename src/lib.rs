@@ -1,4 +1,4 @@
-use chumsky::{input::ValueInput, prelude::*, primitive::select};
+use chumsky::{input::ValueInput, prelude::*, primitive::select, text::ascii::ident};
 use ariadne::{Color, Label, Report, ReportKind, Source};
 
 pub type Span = SimpleSpan;
@@ -9,6 +9,7 @@ pub enum Expr<'src>{
     Error,
     Value(Value<'src>),
     Local(&'src str),
+    Neg(Box<Spanned<Self>>),
     Let(&'src str, Box<Spanned<Self>>, Box<Spanned<Self>>),
     Then(Box<Spanned<Self>>, Box<Spanned<Self>>),
     Call(Box<Spanned<Self>>, Spanned<Vec<Spanned<Self>>>),
@@ -178,147 +179,53 @@ fn expr_parser<'tokens, 'src: 'tokens, I>()
 -> impl Parser<'tokens, I, Spanned<Expr<'src>>, extra::Err<Rich<'tokens, Token<'src>, Span>>> + Clone
     where I: ValueInput<'tokens, Token = Token<'src>, Span = Span>
 {
-    // let ident = select!{ Token::Ident(ident) => ident };
-    recursive(|expr| {
-        let inline_expr = recursive(|inline_expr|{
-                let ident = select!{ Token::Ident(ident) => ident };
-                let val = select!{
-                    Token::Bool(b) => Expr::Value(Value::Bool(b)),
-                    Token::I32(v) => Expr::Value(Value::Int32(v)),
-                };
-
-                // A list of expressions
-                let items = expr
-                    .clone()
-                    .separated_by(just(Token::Comma))
-                    .allow_trailing()
-                    .collect::<Vec<_>>();
-
-                let let_ = 
-                    just(Token::Let)
-                    .ignore_then(ident)
-                    .then_ignore(just(Token::Op(BinaryOp::Assign)))
-                    .then(inline_expr)
-                    .then_ignore(just(Token::SemiColon))
-                    .then(expr.clone())
-                    .map(|((name, val), body)| Expr::Let(name, Box::new(val), Box::new(body)));
-
-                let atom = 
-                    val
-                    .or(ident.map(|i| Expr::Local(i)))
-                    .or(let_)
-                    .map_with(|expr, e| (expr, e.span()))
-                    .or(expr
-                        .clone()
-                        .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')'))))
-
-                    .recover_with(via_parser(nested_delimiters(
-                        Token::Ctrl('('), 
-                        Token::Ctrl(')'), 
-                        [
-                            (Token::Ctrl('['), Token::Ctrl(']')),
-                            (Token::Ctrl('{'), Token::Ctrl('}'))
-                        ],
-                        |span| (Expr::Error, span))))
-                    .boxed();
-
-                // Function calls have very high precedence so we prioritise them
-                let call = atom.foldl_with(
-                    items
-                        .delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
-                        .map_with(|args, e| (args, e.span()))
-                        .repeated(),
-                    |f, args, e| (Expr::Call(Box::new(f), args), e.span()),
-                );
-
-                // Product ops (multiply and divide) have equal precedence
-                let op = just(Token::Op(BinaryOp::Mul))
-                    .to(BinaryOp::Mul)
-                    .or(just(Token::Op(BinaryOp::Div)).to(BinaryOp::Div));
-                let product = call
-                    .clone()
-                    .foldl_with(op.then(call).repeated(), |a, (op, b), e| {
-                        (Expr::Binary(Box::new(a), op, Box::new(b)), e.span())
-                    });
-
-                // Sum ops (add and subtract) have equal precedence
-                let op = just(Token::Op(BinaryOp::Add))
-                    .to(BinaryOp::Add)
-                    .or(just(Token::Op(BinaryOp::Sub)).to(BinaryOp::Sub));
-                let sum = product
-                    .clone()
-                    .foldl_with(op.then(product).repeated(), |a, (op, b), e| {
-                        (Expr::Binary(Box::new(a), op, Box::new(b)), e.span())
-                    });
-
-                let op = just(Token::Op(BinaryOp::Eq))
-                    .to(BinaryOp::Eq)
-                    .or(just(Token::Op(BinaryOp::NotEq)).to(BinaryOp::NotEq));
-                let compare = sum
-                    .clone()
-                    .foldl_with(op.then(sum).repeated(), |a, (op, b), e| {
-                        (Expr::Binary(Box::new(a), op, Box::new(b)), e.span())
-                    });
-
-                compare.labelled("expression").as_context()
-            });
-        // Blocks are expressions but delimited with braces
-        let block = expr
-            .clone()
-            .delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')))
-            // Attempt to recover anything that looks like a block but contains errors
-            .recover_with(via_parser(nested_delimiters(
-                Token::Ctrl('{'),
-                Token::Ctrl('}'),
-                [
-                    (Token::Ctrl('('), Token::Ctrl(')')),
-                    (Token::Ctrl('['), Token::Ctrl(']')),
-                ],
-                |span| (Expr::Error, span),
-            )));
-
-            let block_expr = block;
-
-            let block_chain = block_expr
-                .clone()
-                .foldl_with(block_expr.clone().repeated(), |a, b, e| {
-                    (Expr::Then(Box::new(a), Box::new(b)), e.span())
-                });
-
-         let block_recovery = nested_delimiters(
-            Token::Ctrl('{'),
-            Token::Ctrl('}'),
-            [
-                (Token::Ctrl('('), Token::Ctrl(')')),
-                (Token::Ctrl('['), Token::Ctrl(']')),
-            ],
-            |span| (Expr::Error, span),
-        );
-
-        block_chain
-            .or(inline_expr.clone())
-            .recover_with(skip_then_retry_until(
-                block_recovery.ignored().or(any().ignored()),
-                one_of([
-                    Token::Ctrl(';'),
-                    Token::Ctrl('}'),
-                    Token::Ctrl(')'),
-                    Token::Ctrl(']'),
-                ])
-                .ignored(),
-            ))
-            .foldl_with(just(Token::SemiColon).ignore_then(expr.or_not()).repeated(), 
-            |a, b, e| {
-                    let span:Span = e.span();
-                    (
-                        Expr::Then(
-                            Box::new(a), 
-                            Box::new(b.unwrap_or_else(|| (Expr::Value(Value::Null), span.to_end()))),
-                        ),
-                        span
-                    )
-                }
+    recursive(|expr|{
+        let int = select! { Token::I32(i) => Expr::Value(Value::Int32(i))};
+        let ident = select! { Token::Ident(i) => Expr::Local(i) };
+        let atom = 
+            int.map_with(|tok, e| (tok, e.span()))
+            .or(
+                expr.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
             )
+            .or(ident.map_with(|a, e| (a, e.span())));
+
+        let unary = 
+            just(Token::Op(BinaryOp::Sub))
+            .repeated()
+            .foldr(atom, |_op, rhs|{
+                rhs
+            });
+
+        // let select_op = select! { Token::Op(i) => i };
+        // Product ops (multiply and divide) have equal precedence
+        let op = 
+            just(Token::Op(BinaryOp::Mul)).to(BinaryOp::Mul)
+            .or(just(Token::Op(BinaryOp::Div)).to(BinaryOp::Div));
+
+        let product = unary
+            .clone()
+            .foldl_with(op.then(unary).repeated(), |a, (op, b), e| {
+                (Expr::Binary(Box::new(a), op, Box::new(b)),e.span())
+            });
+
+        let op = 
+            just(Token::Op(BinaryOp::Add)).to(BinaryOp::Add)
+            .or(just(Token::Op(BinaryOp::Sub)).to(BinaryOp::Sub));
+        let sum = product
+            .clone()
+            .foldl_with(op.then(product).repeated(), |a, (op, b), e| {
+                (Expr::Binary(Box::new(a), op, Box::new(b)), e.span())
+            });
+
+        let op = 
+            just(Token::Op(BinaryOp::Eq)).to(BinaryOp::Eq)
+            .or(just(Token::Op(BinaryOp::NotEq)).to(BinaryOp::NotEq));
+        let compare = sum
+            .clone()
+        .foldl_with(op.then(sum).repeated(), |a, (op, b), e| {
+            (Expr::Binary(Box::new(a), op, Box::new(b)), e.span())
+        });
+        compare
     })
 }
 
@@ -376,8 +283,7 @@ fn aaa() {
 
 fn bbb() {
     let input = r#"
-let hello = 42 + 1;
-let world = hello + 1;
+42 + 1 + hello
 "#;
     println!("input: {}", input);
     let (tokens, err) = lexer().parse(input).into_output_errors();
