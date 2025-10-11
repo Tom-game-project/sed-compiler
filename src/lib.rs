@@ -222,10 +222,54 @@ fn expr_parser<'tokens, 'src: 'tokens, I>()
             .or(just(Token::Op(BinaryOp::NotEq)).to(BinaryOp::NotEq));
         let compare = sum
             .clone()
-        .foldl_with(op.then(sum).repeated(), |a, (op, b), e| {
-            (Expr::Binary(Box::new(a), op, Box::new(b)), e.span())
-        });
-        compare
+            .foldl_with(op.then(sum).repeated(), |a, (op, b), e| {
+                (Expr::Binary(Box::new(a), op, Box::new(b)), e.span())
+            });
+
+        let op = 
+            just(Token::Op(BinaryOp::Assign)).to(BinaryOp::Assign);
+        let assign = compare
+            .clone()
+            .foldl_with(op.then(compare).repeated(), |a, (op, b), e|{
+                (Expr::Binary(Box::new(a), op, Box::new(b)), e.span())
+            }) ;
+
+        assign
+    })
+}
+
+fn decl_parser<'tokens, 'src: 'tokens, I>() 
+-> impl Parser<'tokens, I, Spanned<Expr<'src>>, extra::Err<Rich<'tokens, Token<'src>, Span>>> + Clone
+    where I: ValueInput<'tokens, Token = Token<'src>, Span = Span>
+{
+    let ident = select! { Token::Ident(i) => i };
+    recursive(|decl|{
+        let r#let = 
+            just(Token::Let)
+            .ignore_then(ident)
+            .then_ignore(just(Token::Op(BinaryOp::Assign)))
+            .then(expr_parser())
+            .then_ignore(just(Token::SemiColon))
+            .then(decl.clone())
+            .map_with(|((name, rhs), then), e| {
+                (Expr::Let(name, Box::new(rhs), Box::new(then)), e.span())
+            });
+
+        r#let
+            .or(expr_parser())
+            .foldl_with(just(Token::SemiColon).ignore_then(decl.or_not()).repeated(),
+            |a, b, e|{
+                let span:Span = e.span();
+                (
+                    Expr::Then(
+                        Box::new(a),
+                        Box::new(
+                            b.unwrap_or_else(|| (Expr::Value(Value::Null), span.to_end()))
+                        )
+                    ),
+                    span
+                )
+            })
     })
 }
 
@@ -283,14 +327,17 @@ fn aaa() {
 
 fn bbb() {
     let input = r#"
-42 + 1 + hello
+let a = 42 + 1 + hello;
+let b = a * 2;
+a = a + b;
+b = c + 1;
 "#;
     println!("input: {}", input);
     let (tokens, err) = lexer().parse(input).into_output_errors();
 
     if let Some(tokens) = tokens {
         println!("{:#?}", tokens);
-        let parse_result = expr_parser().parse(
+        let parse_result = decl_parser().parse(
             tokens
                 .as_slice()
                 .map((input.len()..input.len()).into(), |(t, s)| (t, s))
