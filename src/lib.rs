@@ -1,5 +1,5 @@
-use chumsky::{input::ValueInput, prelude::*, primitive::select, text::ascii::ident};
-use ariadne::{Color, Label, Report, ReportKind, Source};
+use chumsky::{input::ValueInput, prelude::*};
+
 
 pub type Span = SimpleSpan;
 pub type Spanned<T> = (T, Span);
@@ -46,6 +46,7 @@ pub struct Arg<'src>{
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Func<'src> {
+    public: bool,
     name: &'src str,
     args: Vec<(Arg<'src>, Span)>,
     rtype: &'src str,
@@ -54,6 +55,7 @@ pub struct Func<'src> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token<'src>{
+    Pub,
     Fn,
     Let,
     Arrow,
@@ -102,6 +104,7 @@ fn lexer<'src>()
         text::ascii::ident().map(|ident| match ident {
             "fn" => Token::Fn,
             "let" => Token::Let,
+            "pub" => Token::Pub,
             _ => Token::Ident(ident),
         }).labelled("ident");
 
@@ -164,11 +167,31 @@ fn func_parser<'tokens, 'src: 'tokens, I>()
             .then_ignore(just(Token::Arrow).labelled("Arrow"))
             .then(ident);
 
-    let func_def = fn_header
-        .then(expr_parser().delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}'))))
-        .map_with(|((((_, name), args), rtype), body), e| {
-            (Func { name, args, rtype, body } ,e.span())
-        });
+    let func_def = 
+        just(Token::Pub)
+        .or_not()
+        .then(fn_header)
+        .then(
+            decl_parser()
+            .delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')))
+            //.recover_with(via_parser(nested_delimiters(
+            //        Token::Ctrl('{'),
+            //        Token::Ctrl('}'),
+            //        [
+            //            (Token::Ctrl('('), Token::Ctrl(')')),
+            //            (Token::Ctrl('['), Token::Ctrl(']')),
+            //        ],
+            //        |span| (Expr::Error, span),
+            //)))
+        )
+        .map_with(
+            |((public, (((_, name), args), rtype)), body), e|{
+            let public = match public {
+                Some(_) => true,
+                None => false, 
+            };
+            (Func { public, name, args, rtype, body }, e.span())
+        }).labelled("function");
 
     func_def
         .repeated()
@@ -243,6 +266,7 @@ fn decl_parser<'tokens, 'src: 'tokens, I>()
     where I: ValueInput<'tokens, Token = Token<'src>, Span = Span>
 {
     let ident = select! { Token::Ident(i) => i };
+
     recursive(|decl|{
         let r#let = 
             just(Token::Let)
@@ -255,7 +279,39 @@ fn decl_parser<'tokens, 'src: 'tokens, I>()
                 (Expr::Let(name, Box::new(rhs), Box::new(then)), e.span())
             });
 
-        r#let
+        let block = decl
+            .clone()
+            .delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')))
+            // Attempt to recover anything that looks like a block but contains errors
+            .recover_with(via_parser(nested_delimiters(
+                Token::Ctrl('{'),
+                Token::Ctrl('}'),
+                [
+                    (Token::Ctrl('('), Token::Ctrl(')')),
+                    (Token::Ctrl('['), Token::Ctrl(']')),
+                ],
+                |span| (Expr::Error, span),
+            )));
+
+        let block_recovery = nested_delimiters(
+            Token::Ctrl('{'),
+            Token::Ctrl('}'),
+            [
+                (Token::Ctrl('('), Token::Ctrl(')')),
+                (Token::Ctrl('['), Token::Ctrl(']')),
+            ],
+            |span| (Expr::Error, span),
+        );
+
+        let block_chain = block
+            .clone()
+            .foldl_with(block.clone().repeated(), |a, b, e| 
+            {
+                (Expr::Then(Box::new(a), Box::new(b)), e.span())
+            });
+
+        block_chain
+            .or(r#let)
             .or(
                 expr_parser()
                 .then_ignore(
@@ -267,115 +323,136 @@ fn decl_parser<'tokens, 'src: 'tokens, I>()
                 )
             )
             .or(
-                expr_parser().then_ignore(end())
+                expr_parser()
             )
+            .recover_with(skip_then_retry_until(
+                block_recovery.ignored().or(any().ignored()),
+                one_of([
+                    Token::Ctrl(';'),
+                    Token::Ctrl('}'),
+                    Token::Ctrl(')'),
+                    Token::Ctrl(']'),
+                ])
+                .ignored(),
+            ))
     })
-}
-
-fn aaa() {
-    let input = r#"
-        fn name_hello a:num, b:num, c:string -> bool {
-            let hello = 42 + 1;
-        }
-
-        fn name_world a:num, b:num, c:string -> bool {
-
-        }
-"#;
-    // fn map lst:list<T>, func:<fn T -> U> -> list<U>
-    println!("input: {}", input);
-    let (tokens, err) = lexer().parse(input).into_output_errors();
-
-    if let Some(tokens) = tokens {
-        println!("{:#?}", tokens);
-        let parse_result = func_parser().parse(
-            tokens
-                .as_slice()
-                .map((input.len()..input.len()).into(), |(t, s)| (t, s))
-        ).into_result();
-
-        match parse_result {
-            Ok(a) => {
-                println!("{:#?}", a);
-            }
-            Err(errs) => {
-                println!("{:#?}", errs);
-                for err in errs { 
-                    Report::build(ReportKind::Error, ((), err.span().into_range()))
-                    .with_config(ariadne::Config::new().with_index_type(ariadne::IndexType::Byte))
-                    .with_code(3)
-                    //.with_message(err.to_string())
-                    .with_label(
-                        Label::new(((), err.span().into_range()))
-                            //.with_message(err.reason().to_string())
-                            .with_color(Color::Red),
-                    )
-                    .finish()
-                    .eprint(Source::from(input))
-                    .unwrap();
-                }
-            }
-        }
-    }
-    else 
-    {
-        println!("lexer error");
-        println!("{:?}", err);
-    }
-}
-
-fn bbb() {
-    let input = r#"
-let a = 42 + 1 + hello;
-let b = a * 2;
-a = a + b;
-let b = a * 2;
-b = c + 1
-"#;
-    println!("input: {}", input);
-    let (tokens, err) = lexer().parse(input).into_output_errors();
-
-    if let Some(tokens) = tokens {
-        println!("{:#?}", tokens);
-        let parse_result = decl_parser().parse(
-            tokens
-                .as_slice()
-                .map((input.len()..input.len()).into(), |(t, s)| (t, s))
-        ).into_result();
-
-        match parse_result {
-            Ok(a) => {
-                println!("{:#?}", a);
-            }
-            Err(errs) => {
-                println!("{:#?}", errs);
-                for err in errs { 
-                    Report::build(ReportKind::Error, ((), err.span().into_range()))
-                    .with_config(ariadne::Config::new().with_index_type(ariadne::IndexType::Byte))
-                    .with_code(3)
-                    //.with_message(err.to_string())
-                    .with_label(
-                        Label::new(((), err.span().into_range()))
-                            //.with_message(err.reason().to_string())
-                            .with_color(Color::Red),
-                    )
-                    .finish()
-                    .eprint(Source::from(input))
-                    .unwrap();
-                }
-            }
-        }
-    }
-    else 
-    {
-        println!("lexer error");
-        println!("{:?}", err);
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ariadne::{Color, Label, Report, ReportKind, Source};
+
+    fn aaa() {
+        let input = r#"
+pub fn name_hello a:num, b:num, c:string -> bool {
+    let a = 42 + 1 + hello;
+    let b = a * 2;
+    a = a + b;
+    let b = a * 2;
+    b = c + 1
+}
+
+fn name_world a:num, b:num, c:string -> bool {
+    let a = 42 + 1 + hello;
+    let b = a * 2;
+    a = a + b;
+    let b = a * 2;
+    b = c + 1
+}
+"#;
+        // fn map lst:list<T>, func:<fn T -> U> -> list<U>
+        println!("input: {}", input);
+        let (tokens, err) = lexer().parse(input).into_output_errors();
+
+        if let Some(tokens) = tokens {
+            // println!("{:#?}", tokens);
+            let parse_result = func_parser().parse(
+                tokens
+                    .as_slice()
+                    .map((input.len()..input.len()).into(), |(t, s)| (t, s))
+            ).into_result();
+
+            match parse_result {
+                Ok(a) => {
+                    println!("{:#?}", a);
+                }
+                Err(errs) => {
+                    println!("{:#?}", errs);
+                    for err in errs { 
+                        Report::build(ReportKind::Error, ((), err.span().into_range()))
+                        .with_config(ariadne::Config::new().with_index_type(ariadne::IndexType::Byte))
+                        .with_code(3)
+                        //.with_message(err.to_string())
+                        .with_label(
+                            Label::new(((), err.span().into_range()))
+                                //.with_message(err.reason().to_string())
+                                .with_color(Color::Red),
+                        )
+                        .finish()
+                        .eprint(Source::from(input))
+                        .unwrap();
+                    }
+                }
+            }
+        }
+        else 
+        {
+            println!("lexer error");
+            println!("{:?}", err);
+        }
+    }
+
+
+    fn bbb() {
+        let input = r#"
+    let a = 42 + 1 + hello;
+    let b = (a + 1) * 2;
+    a = a + b;
+    let b = a * 2;
+    let b = a * 2;
+    b = c + 1
+    "#;
+        println!("input: {}", input);
+        let (tokens, err) = lexer().parse(input).into_output_errors();
+
+        if let Some(tokens) = tokens {
+            println!("{:#?}", tokens);
+            let parse_result = decl_parser().parse(
+                tokens
+                    .as_slice()
+                    .map((input.len()..input.len()).into(), |(t, s)| (t, s))
+            ).into_result();
+
+            match parse_result {
+                Ok(a) => {
+                    println!("{:#?}", a);
+                }
+                Err(errs) => {
+                    println!("{:#?}", errs);
+                    for err in errs { 
+                        Report::build(ReportKind::Error, ((), err.span().into_range()))
+                        .with_config(ariadne::Config::new().with_index_type(ariadne::IndexType::Byte))
+                        .with_code(3)
+                        //.with_message(err.to_string())
+                        .with_label(
+                            Label::new(((), err.span().into_range()))
+                                //.with_message(err.reason().to_string())
+                                .with_color(Color::Red),
+                        )
+                        .finish()
+                        .eprint(Source::from(input))
+                        .unwrap();
+                    }
+                }
+            }
+        }
+        else 
+        {
+            println!("lexer error");
+            println!("{:?}", err);
+        }
+    }
 
     #[test]
     fn it_works00() {
