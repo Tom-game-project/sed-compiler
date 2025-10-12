@@ -256,20 +256,19 @@ fn decl_parser<'tokens, 'src: 'tokens, I>()
             });
 
         r#let
-            .or(expr_parser())
-            .foldl_with(just(Token::SemiColon).ignore_then(decl.or_not()).repeated(),
-            |a, b, e|{
-                let span:Span = e.span();
-                (
-                    Expr::Then(
-                        Box::new(a),
-                        Box::new(
-                            b.unwrap_or_else(|| (Expr::Value(Value::Null), span.to_end()))
-                        )
-                    ),
-                    span
+            .or(
+                expr_parser()
+                .then_ignore(
+                    just(Token::SemiColon)
+                    )
+                .then(decl.clone())
+                .map_with(|(lhs, rhs), e|
+                    (Expr::Then(Box::new(lhs), Box::new(rhs)), e.span())
                 )
-            })
+            )
+            .or(
+                expr_parser().then_ignore(end())
+            )
     })
 }
 
@@ -330,7 +329,8 @@ fn bbb() {
 let a = 42 + 1 + hello;
 let b = a * 2;
 a = a + b;
-b = c + 1;
+let b = a * 2;
+b = c + 1
 "#;
     println!("input: {}", input);
     let (tokens, err) = lexer().parse(input).into_output_errors();
