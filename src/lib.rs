@@ -10,8 +10,13 @@ pub enum Expr<'src>{
     Value(Value<'src>),
     Local(&'src str),
     Neg(Box<Spanned<Self>>),
-    Let(&'src str, Box<Spanned<Self>>, Box<Spanned<Self>>),
+    Let(&'src str, Box<Spanned<Self>>),
     Then(Box<Spanned<Self>>, Box<Spanned<Self>>),
+    If (
+        Box<Spanned<Self>>,
+        Box<Spanned<Self>>, 
+        Box<Option<Spanned<Self>>>
+    ),
     Call(Box<Spanned<Self>>, Spanned<Vec<Spanned<Self>>>),
     Binary(Box<Spanned<Self>>, BinaryOp, Box<Spanned<Self>>),
 }
@@ -58,6 +63,8 @@ pub enum Token<'src>{
     Pub,
     Fn,
     Let,
+    If,
+    Else,
     Arrow,
     Colon,
     SemiColon,
@@ -105,6 +112,8 @@ fn lexer<'src>()
             "fn" => Token::Fn,
             "let" => Token::Let,
             "pub" => Token::Pub,
+            "if" => Token::If,
+            "else" => Token::Else,
             _ => Token::Ident(ident),
         }).labelled("ident");
 
@@ -174,15 +183,15 @@ fn func_parser<'tokens, 'src: 'tokens, I>()
         .then(
             decl_parser()
             .delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')))
-            //.recover_with(via_parser(nested_delimiters(
-            //        Token::Ctrl('{'),
-            //        Token::Ctrl('}'),
-            //        [
-            //            (Token::Ctrl('('), Token::Ctrl(')')),
-            //            (Token::Ctrl('['), Token::Ctrl(']')),
-            //        ],
-            //        |span| (Expr::Error, span),
-            //)))
+            .recover_with(via_parser(nested_delimiters(
+                    Token::Ctrl('{'),
+                    Token::Ctrl('}'),
+                    [
+                        (Token::Ctrl('('), Token::Ctrl(')')),
+                        (Token::Ctrl('['), Token::Ctrl(']')),
+                    ],
+                    |span| (Expr::Error, span),
+            )))
         )
         .map_with(
             |((public, (((_, name), args), rtype)), body), e|{
@@ -276,65 +285,52 @@ fn decl_parser<'tokens, 'src: 'tokens, I>()
             .then_ignore(just(Token::SemiColon))
             .then(decl.clone())
             .map_with(|((name, rhs), then), e| {
-                (Expr::Let(name, Box::new(rhs), Box::new(then)), e.span())
-            });
-
-        let block = decl
-            .clone()
-            .delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')))
-            // Attempt to recover anything that looks like a block but contains errors
-            .recover_with(via_parser(nested_delimiters(
-                Token::Ctrl('{'),
-                Token::Ctrl('}'),
-                [
-                    (Token::Ctrl('('), Token::Ctrl(')')),
-                    (Token::Ctrl('['), Token::Ctrl(']')),
-                ],
-                |span| (Expr::Error, span),
-            )));
-
-        let block_recovery = nested_delimiters(
-            Token::Ctrl('{'),
-            Token::Ctrl('}'),
-            [
-                (Token::Ctrl('('), Token::Ctrl(')')),
-                (Token::Ctrl('['), Token::Ctrl(']')),
-            ],
-            |span| (Expr::Error, span),
-        );
-
-        let block_chain = block
-            .clone()
-            .foldl_with(block.clone().repeated(), |a, b, e| 
-            {
-                (Expr::Then(Box::new(a), Box::new(b)), e.span())
-            });
-
-        block_chain
-            .or(r#let)
-            .or(
-                expr_parser()
-                .then_ignore(
-                    just(Token::SemiColon)
-                    )
-                .then(decl.clone())
-                .map_with(|(lhs, rhs), e|
-                    (Expr::Then(Box::new(lhs), Box::new(rhs)), e.span())
+                (
+                    Expr::Then(
+                        Box::new((Expr::Let(name , Box::new(rhs)), e.span())),
+                        Box::new(then)
+                    ), e.span()
                 )
-            )
-            .or(
+            });
+
+        let r#if = 
+            just(Token::If)
+            .ignore_then(
                 expr_parser()
             )
-            .recover_with(skip_then_retry_until(
-                block_recovery.ignored().or(any().ignored()),
-                one_of([
-                    Token::Ctrl(';'),
-                    Token::Ctrl('}'),
-                    Token::Ctrl(')'),
-                    Token::Ctrl(']'),
-                ])
-                .ignored(),
-            ))
+            .then(
+                decl.clone()
+                .delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')))
+            )
+            .then(
+                just(Token::Else)
+                .ignore_then(
+                    decl.clone()
+                    .delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')))
+                ).or_not()
+            ).map_with(|((cond, then), else_), e| {
+                (Expr::If(Box::new(cond), Box::new(then), Box::new(else_)), e.span())
+            });
+
+        let as_expr = expr_parser() .or(r#if);
+
+        r#let
+        //.or(
+        //    r#if
+        //)
+        .or(
+            as_expr
+            .then_ignore(
+                just(Token::SemiColon)
+                )
+            .then(decl)
+            .map_with(|(lhs, rhs), e|
+                (Expr::Then(Box::new(lhs), Box::new(rhs)), e.span())
+            )
+        )
+        .or(
+            expr_parser()
+        )
     })
 }
 
@@ -355,9 +351,14 @@ pub fn name_hello a:num, b:num, c:string -> bool {
 
 fn name_world a:num, b:num, c:string -> bool {
     let a = 42 + 1 + hello;
-    let b = a * 2;
+    let b = (a + 1) * 2;
     a = a + b;
     let b = a * 2;
+    if a == 1 {
+        let b = a * 2;
+    } else {
+        let b = a * 2;
+    }
     b = c + 1
 }
 "#;
