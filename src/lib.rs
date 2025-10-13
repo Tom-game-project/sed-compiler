@@ -228,7 +228,6 @@ fn expr_parser<'tokens, 'src: 'tokens, I>()
                 rhs
             });
 
-        // let select_op = select! { Token::Op(i) => i };
         // Product ops (multiply and divide) have equal precedence
         let op = 
             just(Token::Op(BinaryOp::Mul)).to(BinaryOp::Mul)
@@ -308,29 +307,30 @@ fn decl_parser<'tokens, 'src: 'tokens, I>()
                     decl.clone()
                     .delimited_by(just(Token::Ctrl('{')), just(Token::Ctrl('}')))
                 ).or_not()
-            ).map_with(|((cond, then), else_), e| {
+            )
+            .map_with(|((cond, then), else_), e| {
                 (Expr::If(Box::new(cond), Box::new(then), Box::new(else_)), e.span())
             });
 
-        let as_expr = expr_parser() .or(r#if);
+        let as_expr = 
+            choice((
+                expr_parser() 
+                .then_ignore(
+                    just(Token::SemiColon)
+                ),
+                r#if
+            ));
 
-        r#let
-        //.or(
-        //    r#if
-        //)
-        .or(
-            as_expr
-            .then_ignore(
-                just(Token::SemiColon)
-                )
+        choice((
+            r#let,
+            as_expr.clone()
             .then(decl)
             .map_with(|(lhs, rhs), e|
                 (Expr::Then(Box::new(lhs), Box::new(rhs)), e.span())
-            )
-        )
-        .or(
+            ),
+            as_expr, // あとに何も続かない場合
             expr_parser()
-        )
+        ))
     })
 }
 
@@ -346,7 +346,7 @@ pub fn name_hello a:num, b:num, c:string -> bool {
     let b = a * 2;
     a = a + b;
     let b = a * 2;
-    b = c + 1
+    b = c + 1;
 }
 
 fn name_world a:num, b:num, c:string -> bool {
@@ -356,8 +356,10 @@ fn name_world a:num, b:num, c:string -> bool {
     let b = a * 2;
     if a == 1 {
         let b = a * 2;
+        b
     } else {
         let b = a * 2;
+        b + 1
     }
     b = c + 1
 }
