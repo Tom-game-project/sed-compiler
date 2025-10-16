@@ -441,7 +441,7 @@ mod tests {
 
     fn aaa() {
         let input = r#"
-pub fn is_empty a:bit32 -> bool {
+fn is_empty a:bit32 -> bool {
     sed${
         "s/~$/T/  ",
         "s/~.*$/F/",
@@ -450,27 +450,46 @@ pub fn is_empty a:bit32 -> bool {
     }$
 }
 
-pub fn name_hello a:num, b:num, c:string -> bool {
-    let a = 42 + 1 + hello;
-    let b = a * 2;
-    a = a + b;
-    let b = a * 2;
-    b = c + 1;
+fn shift_left1 a:bit32 -> bit32 {
+    sed ${
+        "s/\\(~[01]*\\)/\\10;/"
+    }$
 }
 
-fn name_world a:num, b:num, c:string -> bool {
-    let a = 42 + 1 + hello;
-    let b = (a + 1) * 2;
-    a = a + b;
-    let b = a * 2;
-    if a == 1 {
-        let b = a * 2;
-        b
-    } else {
-        let b = a * 2;
-        b + 1
-    }
-    b = c + 1
+fn shift_right1 a:bit32 -> bit32 {
+    sed ${
+        "s/\\(~[01]*\\)[01]/\\1;/"
+    }$
+}
+
+fn ends_with_zero a:bit32 -> bool {
+    sed ${
+        "s/.*0$/~1;/ ",
+        "s/.*1$/~0;/ ", 
+    }$
+}
+
+pub fn add a:bit32, b:bit32 -> bit32 {
+    sed ${
+        "s/~\\([^\\~]*\\)~\\([^\\~]*\\)/add 0;;\\1;\\2;/",
+        "b addloop",
+        ":addloop",
+        "s/add 1;\\([01]*\\);;;/1\\1/",
+        "s/add 0;\\([01]*\\);;;/\\1/",
+        "s/add \\([01]\\);\\([01]*\\);\\([01]*\\);;/add \\1;\\2;\\3;0;/",
+        "s/add \\([01]\\);\\([01]*\\);;\\([01]*\\);/add \\1;\\2;0;\\3;/",
+        "s/add \\([01]\\);\\([01]*\\);\\([01]*\\)\\([01]\\);\\([01]*\\)\\([01]\\);/add \\1\\4\\6;\\2;\\3;\\5;/",
+        "s/add 000;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;0\\1;\\2;\\3;/",
+        "s/add 001;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;1\\1;\\2;\\3;/",
+        "s/add 010;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;1\\1;\\2;\\3;/",
+        "s/add 011;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;0\\1;\\2;\\3;/",
+        "s/add 100;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;1\\1;\\2;\\3;/",
+        "s/add 101;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;0\\1;\\2;\\3;/",
+        "s/add 110;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;0\\1;\\2;\\3;/",
+        "s/add 111;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;1\\1;\\2;\\3;/",
+        "t addloop",
+        "s/\\(.*\\)/~\\1;/",
+    }$
 }
 
 pub fn mul a:bit32, b:bit32 -> bit32 {
@@ -490,7 +509,7 @@ pub fn mul a:bit32, b:bit32 -> bit32 {
         let (tokens, err) = lexer().parse(input).into_output_errors();
 
         if let Some(tokens) = tokens {
-            println!("{:#?}", tokens);
+            // println!("{:#?}", tokens);
             let parse_result = func_parser().parse(
                 tokens
                     .as_slice()
