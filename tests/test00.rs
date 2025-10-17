@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod test00 {
     use sed_compiler_frontend::parser::{
-        lexer,
+        lexer_parse,
         func_parser,
     };
     use chumsky::prelude::*;
@@ -47,7 +47,7 @@ pub fn mul a:bit32, b:bit32 -> bit32 {
 "#;
         // fn map lst:list<T>, func:<fn T -> U> -> list<U>
         println!("input: {}", input);
-        let (tokens, err) = lexer().parse(input).into_output_errors();
+        let (tokens, err) = lexer_parse(input);
 
         if let Some(tokens) = tokens {
             // println!("{:#?}", tokens);
@@ -94,7 +94,7 @@ pub fn mul a:bit32, b:bit32 -> bit32 {
 "#;
         // fn map lst:list<T>, func:<fn T -> U> -> list<U>
         println!("input: {}", input);
-        let (tokens, err) = lexer().parse(input).into_output_errors();
+        let (tokens, err) = lexer_parse(input);
 
         if let Some(tokens) = tokens {
             // println!("{:#?}", tokens);

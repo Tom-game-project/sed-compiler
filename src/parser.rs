@@ -1,4 +1,4 @@
-use chumsky::{combinator::Ignored, input::ValueInput, prelude::*, primitive::select};
+use chumsky::{input::ValueInput, prelude::*};
 
 
 pub type Span = SimpleSpan;
@@ -90,7 +90,7 @@ pub enum Token<'src>{
     Str(&'src str),
 }
 
-pub fn lexer<'src>() 
+fn lexer<'src>() 
 -> impl Parser<'src, &'src str, Vec<Spanned<Token<'src>>>, extra::Err<Rich<'src, char, Span>>> {
     let escape = 
         just('\\')
@@ -434,6 +434,20 @@ fn decl_parser<'tokens, 'src: 'tokens, I>()
     })
 }
 
+pub fn lexer_parse(input: &str) -> (Option<Vec<(Token<'_>, SimpleSpan)>>, Vec<Rich<'_, char>>){
+    lexer().parse(input).into_output_errors()
+}
+
+pub fn parser_parse<'a>(input: &str, tokens: &'a Vec<(Token<'a>, SimpleSpan)>) 
+-> Result<Vec<(Func<'a>, SimpleSpan)>, Vec<Rich<'a, Token<'a>>>>
+{
+    func_parser().parse(
+        tokens
+            .as_slice()
+            .map((input.len()..input.len()).into(), |(t, s)| (t, s))
+    ).into_result()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -442,7 +456,7 @@ mod tests {
     fn aaa() {
         let input = r#"
 fn is_empty a:bit32 -> bool {
-    sed${
+    sed ${
         "s/~$/T/  ",
         "s/~.*$/F/",
         "s/T/~1;/ ",
@@ -506,15 +520,10 @@ pub fn mul a:bit32, b:bit32 -> bit32 {
 "#;
         // fn map lst:list<T>, func:<fn T -> U> -> list<U>
         println!("input: {}", input);
-        let (tokens, err) = lexer().parse(input).into_output_errors();
+        let (tokens, err) = lexer_parse(input);
 
         if let Some(tokens) = tokens {
-            // println!("{:#?}", tokens);
-            let parse_result = func_parser().parse(
-                tokens
-                    .as_slice()
-                    .map((input.len()..input.len()).into(), |(t, s)| (t, s))
-            ).into_result();
+            let parse_result = parser_parse(input, &tokens);
 
             match parse_result {
                 Ok(a) => {
