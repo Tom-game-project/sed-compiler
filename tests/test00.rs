@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod test00 {
-    use chumsky_example2::parser::{
+    use sed_compiler_frontend::parser::{
         lexer,
         func_parser,
     };
