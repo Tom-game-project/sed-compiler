@@ -37,7 +37,7 @@ pub enum BinaryOp {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Sed <'src>{
-    code: Vec<Value<'src>>
+    pub code: Vec<Value<'src>>
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -52,17 +52,17 @@ pub enum Value<'src> {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Arg<'src>{
-    name: &'src str,
-    type_: &'src str
+    pub name: &'src str,
+    pub type_: &'src str
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Func<'src> {
-    public: bool,
-    name: &'src str,
-    args: Vec<(Arg<'src>, Span)>,
-    rtype: &'src str,
-    body: Spanned<Expr<'src>>,
+    pub public: bool,
+    pub name: &'src str,
+    pub args: Vec<(Arg<'src>, Span)>,
+    pub rtype: &'src str,
+    pub body: Spanned<Expr<'src>>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
