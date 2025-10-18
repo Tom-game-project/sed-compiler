@@ -113,3 +113,58 @@ pub fn em_add() -> FuncDef {
     );
     func_add
 }
+
+
+/// you need to define
+/// - twos_complement
+/// - zero_padding32
+/// - add
+pub fn em_sub32() -> FuncDef {
+    let mut func_sub32 = FuncDef::new("sub32", 2, 0, 1);
+    func_sub32.set_proc_contents(vec![
+        SedInstruction::Val(Value::Arg(0)),
+        SedInstruction::Call(CallFunc::new("zero_padding32")),
+        SedInstruction::Val(Value::Arg(1)),
+        SedInstruction::Call(CallFunc::new("zero_padding32")),
+        SedInstruction::Call(CallFunc::new("twos_complement")),
+        SedInstruction::Call(CallFunc::new("add")),
+        SedInstruction::Call(CallFunc::new("zero_padding32")),
+        SedInstruction::Ret,
+    ]);
+    func_sub32
+}
+
+pub fn em_twos_complement() ->FuncDef {
+    let mut twos_complement = FuncDef::new("twos_complement", 1, 0, 1);
+
+    twos_complement.set_proc_contents(vec![
+        SedInstruction::Sed(SedCode("
+s/~\\([^\\~]*\\)/\\1/
+y/01/10/
+s/$/+/
+:add_one_loop
+s/0+$/1/
+t add_one_done
+s/1+$/+0/
+b add_one_loop
+:add_one_done
+s/^\\+/1/
+
+s/\\(.*\\)/~\\1;/
+".to_string())),
+    ]);
+    twos_complement
+}
+
+pub fn em_zero_padding32() -> FuncDef {
+    let mut func_zero_padding32 = FuncDef::new("zero_padding32", 1, 0, 1);
+
+    func_zero_padding32.set_proc_contents(vec![
+        SedInstruction::Sed(SedCode("
+s/~\\([^\\~]*\\)/\\1/
+s/^/00000000000000000000000000000000/
+s/.*\\(................................\\)$/~\\1;/
+".to_string())),
+    ]);
+    func_zero_padding32
+}

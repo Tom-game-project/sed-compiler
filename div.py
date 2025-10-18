@@ -52,11 +52,10 @@ def div_mod_rec(N_rem: str, Q: str, R: str, D: str) -> (str, str):
         return Q, R
 
     # 再帰ステップ
-    B = head(N_rem)
     N_next = tail(N_rem)
-    
+
     # 余り全体をシフトせず、単純にビットを連結する
-    R_new = (R + B).lstrip('0') or '0'
+    R_new = concat(R, head(N_rem)).lstrip('0') or '0'
 
     if is_greater_or_equal(R_new, D):
         R_next = sub(R_new, D)
