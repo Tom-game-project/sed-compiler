@@ -62,7 +62,7 @@ pub struct Func<'src> {
     pub public: bool,
     pub name: &'src str,
     pub args: Vec<(Arg<'src>, Span)>,
-    pub rtype: &'src str,
+    pub rtype: Vec<(&'src str, Span)>,
     pub body: Spanned<Expr<'src>>,
 }
 
@@ -237,7 +237,12 @@ pub fn func_parser<'tokens, 'src: 'tokens, I>()
             .then(ident)
             .then(args_parser())
             .then_ignore(just(Token::Arrow).labelled("Arrow"))
-            .then(ident); // TODO: 複値返却を表現できるようにする
+            .then(
+                ident
+                .map_with(|a, e| (a, e.span()))
+                .separated_by(just(Token::Comma))
+                .collect::<Vec<_>>()
+            );
 
     let func_def = 
         just(Token::Pub)
@@ -534,6 +539,14 @@ pub fn mul a:bit32, b:bit32 -> bit32 {
         }
     }
     return r;
+}
+
+pub fn swap a:bit32, b:bit32 -> bit32, bit32 {
+    let tmp = 0;
+    tmp = a;
+    a = b;
+    b = tmp;
+    return a,b;
 }
 "#;
         // fn map lst:list<T>, func:<fn T -> U> -> list<U>
