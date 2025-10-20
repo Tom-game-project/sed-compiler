@@ -20,6 +20,7 @@ pub enum Expr<'src>{
     Sed(Sed<'src>),
     Call(Box<Spanned<Self>>, Spanned<Vec<Spanned<Self>>>),
     Binary(Box<Spanned<Self>>, BinaryOp, Box<Spanned<Self>>),
+    Return(Spanned<Vec<Spanned<Self>>>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -74,6 +75,7 @@ pub enum Token<'src>{
     If,
     Else,
     Sed,
+    Return,
     // 記号
     Arrow,
     Colon,
@@ -172,6 +174,7 @@ fn lexer<'src>()
             "if" => Token::If,
             "else" => Token::Else,
             "sed" => Token::Sed,
+            "return" => Token::Return,
             _ => Token::Ident(ident),
         })
         .labelled("ident");
@@ -234,7 +237,7 @@ pub fn func_parser<'tokens, 'src: 'tokens, I>()
             .then(ident)
             .then(args_parser())
             .then_ignore(just(Token::Arrow).labelled("Arrow"))
-            .then(ident);
+            .then(ident); // TODO: 複値返却を表現できるようにする
 
     let func_def = 
         just(Token::Pub)
@@ -420,6 +423,18 @@ fn decl_parser<'tokens, 'src: 'tokens, I>()
 
         // sed_compiler用拡張 ここまで
 
+        // return 
+        let r#return = just(Token::Return)
+            .ignore_then(
+                expr_parser()
+                .separated_by(just(Token::Comma))
+                .collect::<Vec<_>>()
+            )
+            .then_ignore(just(Token::SemiColon))
+            .map_with(|a, e| 
+                (Expr::Return((a, e.span())) ,e.span())
+            );
+
         choice((
             r#let,
             as_expr.clone()
@@ -429,7 +444,8 @@ fn decl_parser<'tokens, 'src: 'tokens, I>()
             ),
             as_expr, // あとに何も続かない場合
             expr_parser(), // 式単体 返り値とするような場合
-            sed // sed命令文単体
+            sed, // sed命令文単体
+            r#return
         ))
     })
 }
@@ -507,15 +523,17 @@ pub fn add a:bit32, b:bit32 -> bit32 {
 }
 
 pub fn mul a:bit32, b:bit32 -> bit32 {
+    let r = 0;
     if is_empty(b) {
-        0
+        r = 0;
     } else {
         if ends_with_zero(b) {
-            mul(shift_left1(a), shift_right1(b))
+            r = mul(shift_left1(a), shift_right1(b));
         } else {
-            add(mul(shift_left1(a), shift_right1(b)))
+            r = add(mul(shift_left1(a), shift_right1(b)));
         }
     }
+    return r;
 }
 "#;
         // fn map lst:list<T>, func:<fn T -> U> -> list<U>
