@@ -1,7 +1,10 @@
-use core::fmt;
-use std::{collections::{BinaryHeap, HashMap}, marker::PhantomData, vec};
+use std::{
+    collections::HashSet,
+    marker::PhantomData,
+    vec
+};
 
-use crate::code_gen::{self, CallFunc, ConstVal, IfProc, SedCode, SedInstruction};
+use crate::code_gen::{self, CallFunc, ConstVal, FuncDef, IfProc, SedCode, SedInstruction};
 use sed_compiler_frontend::parser::*;
 
 #[derive(Debug)]
@@ -12,7 +15,8 @@ struct TypeLocal;
 /// 名前とインデックス(usize)を管理する構造体
 #[derive(Debug)]
 struct NameRegistry<T> {
-    names: HashMap<String, usize>,
+    names: Vec<String>,
+    _seen: HashSet<String>,
     _arg_or_local: PhantomData<T>
 }
 
@@ -23,7 +27,8 @@ struct NameRegistryErr {
 impl<T> NameRegistry <T>{
     fn new() -> Self {
         Self {
-            names: HashMap::new(),
+            names: Vec::new(),
+            _seen: HashSet::new(),
             _arg_or_local: PhantomData
         }
     }
@@ -32,35 +37,24 @@ impl<T> NameRegistry <T>{
     /// 成功した場合（新しい名前だった場合）、割り当てられたインデックスを Some(index) で返します。
     /// 失敗した場合（名前が重複していた場合）、None を返します。
     fn add_name(&mut self, name: &str) -> Option<usize> {
-        use std::collections::hash_map::Entry;
-
         // 次に割り当てるインデックスは、現在の要素数
-        let new_index = self.names.len();
-
-        match self.names.entry(name.to_string()) {
-            // Entry::Occupied は、キー（名前）がすでに存在することを意味します
-            Entry::Occupied(_) => {
-                // 名前が重複しているので None を返す
-                None
-            }
-            // Entry::Vacant は、キーが存在しないことを意味します
-            Entry::Vacant(entry) => {
-                // 存在しないので、新しいインデックスを挿入します
-                entry.insert(new_index);
-                // 割り当てたインデックスを Some で返します
-                Some(new_index)
-            }
+        let r = self.names.len();
+        if self._seen.insert(name.to_string()) {
+            self.names.push(name.to_string());
         }
+        else {
+            return None;
+        }
+        Some(r)
     }
 
     /// 名前からインデックスを取得します
     fn get_index(&self, name: &str) -> Option<usize> {
-        // get の結果は &usize なので、 copied() で usize に変換します
-        self.names.get(name).copied()
+        self.names.iter().position(|x| x == name)
     }
 
     fn merge(mut self, other: Self) -> Option<Self> {
-        for (name, index) in other.names {
+        for name in other.names {
             self.add_name(&name);
         }
         Some(self)
@@ -132,10 +126,29 @@ fn create_arg_name_registry<'a>(func: &Func<'a>) -> Result<NameRegistry<TypeArg>
     Ok(name_reg)
 }
 
-// fn build_func_ir<'a>(expr: &Func<'a>) -> Vec<SedInstruction>
-// {
-// 
-// }
+fn build_func_ir<'a>(func: &Func<'a>) -> Result<FuncDef, BuildIRErr<'a>>
+{
+    let mut local_name_registry = if let Ok(a) = 
+        create_local_name_registry(&func.body.0){
+        a
+    }else {
+        return Err(BuildIRErr { note: "failed to create local_name_registry" });
+    };
+    let mut arg_name_registry = if let Ok(a)
+        = create_arg_name_registry(&func) {
+        a
+    }else {
+        return Err(BuildIRErr { note: "failed to create arg_name_registry" });
+    };
+    let mut func_def = FuncDef::new(
+        func.name,
+        func.args.len(), 
+        local_name_registry.names.len(),
+        func.rtype.len());
+
+    func_def.set_proc_contents(build_ir(&func.body.0, &arg_name_registry, &local_name_registry)?);
+    Ok(func_def)
+}
 
 fn find_value_from_name_registry(
     arg_name_registry: &NameRegistry<TypeArg>,
@@ -309,6 +322,17 @@ fn build_ir<'a>(
         Expr::Neg(a) => {
             return Err(BuildIRErr { note: "not yet" })
         }
+        Expr::Return((a, b)) => {
+            let mut ir = vec![];
+            for (expr, _span) in a {
+                ir.append(&mut build_ir(
+                        &expr,
+                        &arg_name_registry,
+                        &local_name_registry)?);
+            }
+            ir.push(SedInstruction::Ret);
+            return Ok(ir);
+        }
     }
 }
 
@@ -383,20 +407,18 @@ mod compiler_test {
     fn compiler_test00()
     {
         let code = r#"
-pub fn mul a:bit32, b:bit32 -> bit32 {
+pub fn mul a:bit32, b:bit32 -> bit32, bit32 {
+    let r = 0;
     if is_empty(b) {
-        let la = 0;
-        0
+        r = 0;
     } else {
-        let lb = 0;
         if ends_with_zero(b) {
-            let lc = 0;
-            mul(shift_left1(a), shift_right1(b))
+            r = mul(shift_left1(a), shift_right1(b));
         } else {
-            let ld = 0;
-            add(mul(shift_left1(a), shift_right1(b)))
+            r = add(mul(shift_left1(a), shift_right1(b)));
         }
     }
+    return r;
 }
 "#;
 
@@ -405,6 +427,7 @@ pub fn mul a:bit32, b:bit32 -> bit32 {
         match tokens {
             Some(tokens) => {
                 let parse_result = parser_parse(code, &tokens);
+                println!("{:#?}", parse_result);
                 match parse_result {
                     Ok(a) => {
                         for (func, _) in a {
@@ -441,20 +464,18 @@ pub fn mul a:bit32, b:bit32 -> bit32 {
     #[test]
     fn compiler_test01() {
         let code = r#"
-pub fn mcompiler_test01ul a:bit32, b:bit32 -> bit32 {
+pub fn mul a:bit32, b:bit32 -> bit32, bit32 {
+    let r = 0;
     if is_empty(b) {
-        let la = 0;
-        0
+        r = 0;
     } else {
-        let lb = 0;
         if ends_with_zero(b) {
-            let lc = 0;
-            mul(shift_left1(a), shift_right1(b))
+            r = mul(shift_left1(a), shift_right1(b));
         } else {
-            let ld = 0;
-            add(mul(shift_left1(a), shift_right1(b)))
+            r = add(mul(shift_left1(a), shift_right1(b)));
         }
     }
+    return r;
 }
 "#;
 
@@ -508,6 +529,5 @@ pub fn mcompiler_test01ul a:bit32, b:bit32 -> bit32 {
                 println!("Some Error Occured");
             }
         }
-
     }
 }

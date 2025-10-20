@@ -143,20 +143,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dbb5fb1acd8a1a18b3dd5be62d25485eb770e05afb408a9627d14d451bae12da"
 
 [[package]]
-name = "sed-compiler-frontend"
-version = "0.1.0"
-source = "git+https://github.com/Tom-game-project/chumsky_example2.git?tag=sed-compiler-v0.1.1-alpha#6bab744bf5decad93578619bba1fea1065125aa5"
-dependencies = [
- "ariadne",
- "chumsky",
-]
-
-[[package]]
-name = "sed_practice"
+name = "sed-compiler"
 version = "0.1.0"
 dependencies = [
  "ariadne",
  "sed-compiler-frontend",
+]
+
+[[package]]
+name = "sed-compiler-frontend"
+version = "0.1.0"
+source = "git+https://github.com/Tom-game-project/chumsky_example2.git?tag=sed-compiler-v0.1.2-alpha#868504f5ed6bdd3f8aefed887d23e1f4912bbc43"
+dependencies = [
+ "ariadne",
+ "chumsky",
 ]
 
 [[package]]

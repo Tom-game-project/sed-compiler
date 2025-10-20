@@ -1,4 +1,4 @@
-use sed_practice::{code_gen::*, embedded::{em_add, em_ends_with_zero, em_mul, em_sub32, em_twos_complement, em_zero_padding32}};
+use sed_compiler::{code_gen::*, embedded::{em_add, em_ends_with_zero, em_mul, em_sub32, em_twos_complement, em_zero_padding32}};
 
 #[cfg(test)]
 mod gen_test2 {
@@ -32,7 +32,7 @@ mod gen_test2 {
 }
 
 fn gen_test_proc00() -> String {
-    use sed_practice::embedded::*;
+    use sed_compiler::embedded::*;
     // それぞれの関数のローカル変数の個数は後で適当なものに置き換える
     let mut entry = FuncDef::new("entry", 0, 2, 1);
     let func_mul = em_mul();
