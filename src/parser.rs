@@ -101,7 +101,7 @@ fn lexer<'src>()
             .or(just('"')).to('"')
             .or(just('n')).to('\n')
             .or(just('t')).to('\t')
-        );
+        ); 
 
     let string_char = none_of("\"\\");
 
@@ -111,10 +111,9 @@ fn lexer<'src>()
         .repeated();
 
     let string = 
-        just('"')
-        .ignore_then(string_contents)
-        .then_ignore(just('"'))
+        string_contents
         .to_slice()
+        .delimited_by(just('"'), just('"'))
         .map(|tok|
            Token::Str(tok)
         );
@@ -554,6 +553,7 @@ pub fn swap a:bit32, b:bit32 -> bit32, bit32 {
         let (tokens, err) = lexer_parse(input);
 
         if let Some(tokens) = tokens {
+            println!("{:#?}", tokens);
             let parse_result = parser_parse(input, &tokens);
 
             match parse_result {
