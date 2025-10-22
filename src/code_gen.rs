@@ -27,6 +27,12 @@ impl CompilerBuilder<Unassembled> {
 
     /// 「組立」処理を実行し、状態を Assembled に遷移させる
     pub fn assemble(mut self) -> CompilerBuilder<Assembled> {
+        // entry pointをリストの先頭に配置する
+        if let Some(elem) = self.func_table.pop_if(|a|a.name == "entry") {
+            self.func_table.insert(0, 
+                elem
+            );
+        }
         // ID割り当て、オフセット計算、ラベル解決など
         assemble_funcs(&mut self.func_table);
         CompilerBuilder {
