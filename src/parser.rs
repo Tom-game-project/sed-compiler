@@ -47,7 +47,7 @@ pub enum Value<'src> {
     Bool(bool),
     Int32(i32),
     Int64(i64),
-    Str(&'src str),
+    Str(String),
     Func(&'src str),
 }
 
@@ -89,34 +89,34 @@ pub enum Token<'src>{
     I32(i32),
     Ctrl(char),
     Ident(&'src str),
-    Str(&'src str),
+    Str(String),
 }
 
 fn lexer<'src>() 
 -> impl Parser<'src, &'src str, Vec<Spanned<Token<'src>>>, extra::Err<Rich<'src, char, Span>>> {
     let escape = 
-        just('\\')
-        .ignore_then(
-            just('\\').to('\\')
-            .or(just('"')).to('"')
-            .or(just('n')).to('\n')
-            .or(just('t')).to('\t')
-        ); 
+        just('\\').ignore_then(choice((
+            just('\\'),
+            just('"'),
+            just('n').to('\n'),
+            just('t').to('\t'),
+        )));
 
-    let string_char = none_of("\"\\");
+    let string_char = 
+        none_of("\"\\");
 
     let string_contents = 
         string_char
         .or(escape)
-        .repeated();
-
-    let string = 
-        string_contents
-        .to_slice()
-        .delimited_by(just('"'), just('"'))
+        .repeated()
+        .collect::<String>()
         .map(|tok|
            Token::Str(tok)
         );
+
+    let string = 
+        string_contents
+        .delimited_by(just('"'), just('"'));
 
     let num = text::int(10)
         .to_slice()
@@ -474,87 +474,17 @@ mod tests {
     use ariadne::{Color, Label, Report, ReportKind, Source};
 
     fn aaa() {
-        let input = r#"
-fn is_empty a:bit32 -> bool {
-    sed ${
-        "s/~$/T/  ",
-        "s/~.*$/F/",
-        "s/T/~1;/ ",
-        "s/F/~0;/ ",
-    }$
-}
+        use std::fs;
+        let code = fs::read_to_string("example.soil")
+            .expect("ファイルの読み込みに失敗しました");
 
-fn shift_left1 a:bit32 -> bit32 {
-    sed ${
-        "s/\\(~[01]*\\)/\\10;/"
-    }$
-}
-
-fn shift_right1 a:bit32 -> bit32 {
-    sed ${
-        "s/\\(~[01]*\\)[01]/\\1;/"
-    }$
-}
-
-fn ends_with_zero a:bit32 -> bool {
-    sed ${
-        "s/.*0$/~1;/ ",
-        "s/.*1$/~0;/ ", 
-    }$
-}
-
-pub fn add a:bit32, b:bit32 -> bit32 {
-    sed ${
-        "s/~\\([^\\~]*\\)~\\([^\\~]*\\)/add 0;;\\1;\\2;/",
-        "b addloop",
-        ":addloop",
-        "s/add 1;\\([01]*\\);;;/1\\1/",
-        "s/add 0;\\([01]*\\);;;/\\1/",
-        "s/add \\([01]\\);\\([01]*\\);\\([01]*\\);;/add \\1;\\2;\\3;0;/",
-        "s/add \\([01]\\);\\([01]*\\);;\\([01]*\\);/add \\1;\\2;0;\\3;/",
-        "s/add \\([01]\\);\\([01]*\\);\\([01]*\\)\\([01]\\);\\([01]*\\)\\([01]\\);/add \\1\\4\\6;\\2;\\3;\\5;/",
-        "s/add 000;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;0\\1;\\2;\\3;/",
-        "s/add 001;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;1\\1;\\2;\\3;/",
-        "s/add 010;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;1\\1;\\2;\\3;/",
-        "s/add 011;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;0\\1;\\2;\\3;/",
-        "s/add 100;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;1\\1;\\2;\\3;/",
-        "s/add 101;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;0\\1;\\2;\\3;/",
-        "s/add 110;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;0\\1;\\2;\\3;/",
-        "s/add 111;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;1\\1;\\2;\\3;/",
-        "t addloop",
-        "s/\\(.*\\)/~\\1;/",
-    }$
-}
-
-pub fn mul a:bit32, b:bit32 -> bit32 {
-    let r = 0;
-    if is_empty(b) {
-        r = 0;
-    } else {
-        if ends_with_zero(b) {
-            r = mul(shift_left1(a), shift_right1(b));
-        } else {
-            r = add(mul(shift_left1(a), shift_right1(b)));
-        }
-    }
-    return r;
-}
-
-pub fn swap a:bit32, b:bit32 -> bit32, bit32 {
-    let tmp = 0;
-    tmp = a;
-    a = b;
-    b = tmp;
-    return a,b;
-}
-"#;
         // fn map lst:list<T>, func:<fn T -> U> -> list<U>
-        println!("input: {}", input);
-        let (tokens, err) = lexer_parse(input);
+        println!("input: {}", code);
+        let (tokens, err) = lexer_parse(&code);
 
         if let Some(tokens) = tokens {
             println!("{:#?}", tokens);
-            let parse_result = parser_parse(input, &tokens);
+            let parse_result = parser_parse(&code, &tokens);
 
             match parse_result {
                 Ok(a) => {
@@ -573,7 +503,7 @@ pub fn swap a:bit32, b:bit32 -> bit32, bit32 {
                                 .with_color(Color::Red),
                         )
                         .finish()
-                        .eprint(Source::from(input))
+                        .eprint(Source::from(&code))
                         .unwrap();
                     }
                 }
