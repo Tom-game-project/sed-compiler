@@ -561,80 +561,8 @@ pub fn mul a:bit32, b:bit32 -> bit32, bit32 {
 
     #[test]
     fn compiler_test02() {
-        let code = r#"
-        fn is_empty a:bit32 -> bool {
-    sed ${
-        "s/~$/T/  ",
-        "s/~.*$/F/",
-        "s/T/~1;/ ",
-        "s/F/~0;/ ",
-    }$
-}
-
-fn shift_left1 a:bit32 -> bit32 {
-    sed ${
-        "s/\\(~[01]*\\)/\\10;/"
-    }$
-}
-
-fn shift_right1 a:bit32 -> bit32 {
-    sed ${
-        "s/\\(~[01]*\\)[01]/\\1;/"
-    }$
-}
-
-fn ends_with_zero a:bit32 -> bool {
-    sed ${
-        "s/.*0$/~1;/ ",
-        "s/.*1$/~0;/ ",
-    }$
-}
-
-pub fn add a:bit32, b:bit32 -> bit32 {
-    sed ${
-        "s/~\\([^\\~]*\\)~\\([^\\~]*\\)/add 0;;\\1;\\2;/",
-        "b addloop",
-        ":addloop",
-        "s/add 1;\\([01]*\\);;;/1\\1/",
-        "s/add 0;\\([01]*\\);;;/\\1/",
-        "s/add \\([01]\\);\\([01]*\\);\\([01]*\\);;/add \\1;\\2;\\3;0;/",
-        "s/add \\([01]\\);\\([01]*\\);;\\([01]*\\);/add \\1;\\2;0;\\3;/",
-        "s/add \\([01]\\);\\([01]*\\);\\([01]*\\)\\([01]\\);\\([01]*\\)\\([01]\\);/add \\1\\4\\6;\\2;\\3;\\5;/",
-        "s/add 000;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;0\\1;\\2;\\3;/",
-        "s/add 001;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;1\\1;\\2;\\3;/",
-        "s/add 010;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;1\\1;\\2;\\3;/",
-        "s/add 011;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;0\\1;\\2;\\3;/",
-        "s/add 100;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 0;1\\1;\\2;\\3;/",
-        "s/add 101;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;0\\1;\\2;\\3;/",
-        "s/add 110;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;0\\1;\\2;\\3;/",
-        "s/add 111;\\([01]*\\);\\([01]*\\);\\([01]*\\);/add 1;1\\1;\\2;\\3;/",
-        "t addloop",
-        "s/\\(.*\\)/~\\1;/",
-    }$
-}
-
-pub fn mul a:bit32, b:bit32 -> bit32 {
-    let r = 0;
-    if is_empty(b) {
-        r = 0;
-    } else {
-        if ends_with_zero(b) {
-            r = mul(shift_left1(a), shift_right1(b));
-        } else {
-            r = add(a, mul(shift_left1(a), shift_right1(b)));
-        }
-    }
-    return r;
-}
-
-pub fn entry -> bit32 {
-    let a = 3;
-    let b = 4;
-
-    return mul(a, b);
-}
-
-"#;
+        use std::fs;
+        let code = fs::read_to_string("example.soil").expect("ファイルの読み込みに失敗しました");
         println!("start compiler_test02...");
         match compiler_frontend(&code){
             Ok(compiler_builder) => {
@@ -644,7 +572,10 @@ pub fn entry -> bit32 {
 
                 match generated {
                     Ok(generated_sed_code) => {
-                        println!("{}", generated_sed_code);
+                        let mut edi = "s/.*/~init~init/\n".to_string();
+                        edi.push_str(&generated_sed_code);
+                        fs::write("sed/c_example.sed", edi).expect("書き込みに失敗しました");
+                        // println!("{}", generated_sed_code);
                     }
                     Err(err) => {
                         println!("{:?}", err);
