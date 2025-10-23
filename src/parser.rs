@@ -475,7 +475,7 @@ mod tests {
 
     fn aaa() {
         use std::fs;
-        let code = fs::read_to_string("example.soil")
+        let code = fs::read_to_string("soil_sample/example.soil")
             .expect("ファイルの読み込みに失敗しました");
 
         // fn map lst:list<T>, func:<fn T -> U> -> list<U>
