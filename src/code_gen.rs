@@ -337,7 +337,7 @@ impl SedgenReturnDispatcher for CallFunc {
         let mut rstr = "".to_string();
         let retlabel = self.return_addr_marker.get_retlabel();
 
-        rstr.push_str(&format!("/^.*\\n:{}\\+[^\\|]*|.*$/ {{\n", retlabel));
+        rstr.push_str(&format!("/^.*\\n:{}~[^\\|]*|.*$/ {{\n", retlabel));
         // s/.../.../形式のマッチ文開始
         {
             // pattern
