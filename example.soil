@@ -91,11 +91,52 @@ pub fn sub32 a:bit32, b:bit32 -> bit32 {
     return zero_padding32(add(zero_padding32(a), twos_complement(zero_padding32(b))));
 }
 
+// 大小関係を記号で変換する関数
+fn relation a:bit32, b:bit32 -> char
+{
+    sed ${
+        "s/~\\([01]*\\)~\\([01]*\\)/\\1=\\2/",
+        ":compare_loop",
+        "s/\\([01]\\)\\([01]*\\)=\\([01]\\)\\([01]*\\)/\\1;\\3;\\2=\\4/",
+        "",
+        "/^1;1;/ {",
+        "    s/^1;1;\\(.\\+\\)/\\1/",
+        "    bcompare_loop",
+        "}",
+        "/^0;0;/ {",
+        "    s/^0;0;\\(.\\+\\)/\\1/",
+        "    bcompare_loop",
+        "}",
+        "/^1;0;\\(.*\\)/ {",
+        "    s/.*/>/",
+        "}",
+        "/^0;1;/ {",
+        "    s/.*/</",
+        "}",
+	"s/\\(.*\\)/~\\1;/"
+    }$
+}
+
+fn is_greater_or_equal a:char -> bool {
+    sed ${
+        "s/^~>$/~1;/",
+        "s/^~=$/~1;/",
+        "s/^~<$/~0;/",
+    }$
+}
+
+fn headtail a:bit32 -> bool, bool {
+    sed ${
+        "s/~\\([10]\\)[01]*\\([01]\\)/~\\1~\\2;/",
+    }$
+}
+
 pub fn entry -> bit32 {
-    let a = 3;
-    let b = 4;
+    let a = 5;
+    let b = 101;
 
     // return mul(a, add(a, b)), add(a, b);
     // return twos_complement(a);
-    return sub32(b, a);
+    // return sub32(b, a);
+    return is_greater_or_equal(relation(a, b));
 }
