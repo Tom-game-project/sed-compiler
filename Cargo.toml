@@ -4,6 +4,6 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-sed-compiler-frontend = { git = "https://github.com/Tom-game-project/chumsky_example2.git", tag = "sed-compiler-v0.1.4-alpha" }
+sed-compiler-frontend = { git = "https://github.com/Tom-game-project/chumsky_example2.git", tag = "sed-compiler-v0.1.5-alpha" }
 ariadne = "0.5"
 

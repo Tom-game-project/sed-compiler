@@ -556,6 +556,7 @@ fn resolve_ret_instructions(
     fixed_offset: usize,
 ) -> Result<usize, CompileErr> {
     if fixed_offset + func_def.retc > stack_size {
+        println!("@ {}", func_def.name);
         return Err(CompileErr::PoppingValueFromEmptyStack);
     }
     let arg_pattern: String = format!(

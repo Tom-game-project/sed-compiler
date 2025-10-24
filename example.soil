@@ -71,10 +71,31 @@ pub fn mul a:bit32, b:bit32 -> bit32 {
     return r;
 }
 
+fn twos_complement a:bit32 -> bit32 {
+    sed ${
+        "s/~\\([^\\~]*\\)/\\1/",
+        "y/01/10/",
+        "s/$/+/",
+        ":add_one_loop",
+        "s/0+$/1/",
+        "t add_one_done",
+        "s/1+$/+0/",
+        "b add_one_loop",
+        ":add_one_done",
+        "s/^\\+/1/",
+        "s/\\(.*\\)/~\\1;/",
+    }$
+}
 
-pub fn entry -> bit32, bit32 {
+pub fn sub32 a:bit32, b:bit32 -> bit32 {
+    return zero_padding32(add(zero_padding32(a), twos_complement(zero_padding32(b))));
+}
+
+pub fn entry -> bit32 {
     let a = 3;
     let b = 4;
 
-    return mul(a, add(a, b)), add(a, b);
+    // return mul(a, add(a, b)), add(a, b);
+    // return twos_complement(a);
+    return sub32(b, a);
 }
