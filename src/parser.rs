@@ -20,6 +20,7 @@ pub enum Expr<'src>{
     Sed(Sed<'src>),
     Call(Box<Spanned<Self>>, Spanned<Vec<Spanned<Self>>>),
     Binary(Box<Spanned<Self>>, BinaryOp, Box<Spanned<Self>>),
+    Assign(Spanned<Vec<Spanned<Self>>>, Box<Spanned<Self>>),
     Return(Spanned<Vec<Spanned<Self>>>),
 }
 
@@ -311,7 +312,6 @@ fn expr_parser<'tokens, 'src: 'tokens, I>()
                     Expr::Call(Box::new(f), args), e.span()),
             );
 
-
         let unary = 
             just(Token::Op(BinaryOp::Sub))
             .repeated()
@@ -348,15 +348,22 @@ fn expr_parser<'tokens, 'src: 'tokens, I>()
                 (Expr::Binary(Box::new(a), op, Box::new(b)), e.span())
             });
 
-        let op = 
-            just(Token::Op(BinaryOp::Assign)).to(BinaryOp::Assign);
-        let assign = compare
-            .clone()
-            .foldl_with(op.then(compare).repeated(), |a, (op, b), e|{
-                (Expr::Binary(Box::new(a), op, Box::new(b)), e.span())
-            }) ;
+        let value_items = 
+                ident
+                .map_with(|tok, e| (tok, e.span()))
+                .separated_by(just(Token::Comma))
+                .allow_trailing()
+                .collect::<Vec<_>>()
+                .map_with(|a, e| (a, e.span()));
 
-        assign
+        let assign = 
+            value_items
+            .then_ignore(just(Token::Op(BinaryOp::Assign)))
+            .then(compare.clone())
+            .map_with(|(a, b), e| 
+                (Expr::Assign(a, Box::new(b)), e.span()));
+
+        assign.or(compare)
     })
 }
 

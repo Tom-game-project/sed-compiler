@@ -64,3 +64,10 @@ pub fn mul a:bit32, b:bit32 -> bit32 {
     return r;
 }
 
+pub fn entry a:bit32, b:bit32 -> bit32 {
+    let a = 0;
+    let b = 0;
+
+    a, b = mul(a, b);
+    return a, b;
+}
