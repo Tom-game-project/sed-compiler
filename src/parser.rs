@@ -194,8 +194,13 @@ fn lexer<'src>()
         )
         .or(ident);
 
+    let comment = just("//")
+        .then(any().and_is(just('\n').not()).repeated())
+        .padded();
+
     token
         .map_with(|tok, e| (tok, e.span()))
+        .padded_by(comment.repeated())
         .padded()
         .recover_with(skip_then_retry_until(any().ignored(), end()))
         .repeated()

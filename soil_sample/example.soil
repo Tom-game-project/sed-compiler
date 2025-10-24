@@ -50,6 +50,7 @@ pub fn add a:bit32, b:bit32 -> bit32 {
 }
 
 pub fn mul a:bit32, b:bit32 -> bit32 {
+    // hello this is comment
     let r = 0;
     if is_empty(b) {
         r = 0;
