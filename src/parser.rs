@@ -33,7 +33,6 @@ pub enum BinaryOp {
     Mod,
     Eq,
     NotEq,
-    Assign,
 }
 
 
@@ -82,6 +81,7 @@ pub enum Token<'src>{
     Colon,
     SemiColon,
     Comma,
+    Assign,
     // 特殊記号
     MbOpen, // ${
     MbClose, // }$
@@ -135,7 +135,7 @@ fn lexer<'src>()
         just('=')
         .then(just('=').or_not())
         .to_slice()
-        .map(|op| if op == "==" { Token::Op(BinaryOp::Eq)} else {Token::Op(BinaryOp::Assign)});
+        .map(|op| if op == "==" { Token::Op(BinaryOp::Eq)} else {Token::Assign});
 
     let op = 
         choice((
@@ -358,7 +358,7 @@ fn expr_parser<'tokens, 'src: 'tokens, I>()
 
         let assign = 
             value_items
-            .then_ignore(just(Token::Op(BinaryOp::Assign)))
+            .then_ignore(just(Token::Assign))
             .then(compare.clone())
             .map_with(|(a, b), e| 
                 (Expr::Assign(a, Box::new(b)), e.span()));
@@ -377,7 +377,7 @@ fn decl_parser<'tokens, 'src: 'tokens, I>()
         let r#let = 
             just(Token::Let)
             .ignore_then(ident)
-            .then_ignore(just(Token::Op(BinaryOp::Assign)))
+            .then_ignore(just(Token::Assign))
             .then(expr_parser())
             .then_ignore(just(Token::SemiColon))
             .then(decl.clone())
