@@ -92,8 +92,9 @@ pub enum SedInstruction {
     /// スタックに定数を積む
     ConstVal(ConstVal),
     /// 関数をよびスタックを関数の引数分消費して
-    /// 返り値をスタックに積む
+    /// 返り値をスタックに積む(返り値の個数だけスタックにpushされる)
     Call(CallFunc),
+    /// スタックをpopしてそれをvalueにセットする
     Set(Value),
     /// func_def.retc分スタックを消費して値を返却する
     Ret,
@@ -711,6 +712,7 @@ fn sedgen_func_def(func_def: &FuncDef, func_table: &[FuncDef]) -> Result<String,
     let fixed_offset = func_def.argc + func_def.localc;
 
     let mut rstr = if is_entry {
+        // format!("{}\n", (0..fixed_offset).map(|_| "~init").collect::<String>())
         "".to_string()
     } else {
         let pattern = format!("\\({}\\)", "~[^\\~]*".repeat(func_def.argc));

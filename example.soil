@@ -131,12 +131,20 @@ fn headtail a:bit32 -> bool, bool {
     }$
 }
 
-pub fn entry -> bit32 {
+fn const_return -> bit32, bit32 {
+    return 5,101;
+}
+
+pub fn entry -> bit32, bit32, bit32{
     let a = 5;
     let b = 101;
 
     // return mul(a, add(a, b)), add(a, b);
     // return twos_complement(a);
-    // return sub32(b, a);
-    return is_greater_or_equal(relation(a, b));
+    // return sub32(b, a), a;
+    // return is_greater_or_equal(relation(a, b));
+    // a, b = const_return();
+    // c = sub32(a, b);
+    //
+    return b, sub32(b, a), sub32(a, b);
 }

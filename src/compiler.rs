@@ -302,30 +302,31 @@ fn build_ir<'a>(
                     lhs.push(SedInstruction::Call(CallFunc::new(op_func_table(&op))));
                     return Ok(lhs);
                 }
-                BinaryOp::Assign => {
-                    // 重要
-                    // 左の式は必ず、localでなければならない
-                    // 代入
-                    let mut rhs = build_ir(&(*rhs).0, &arg_name_registry, &local_name_registry)?;
-                    if let Expr::Local(a) = &(*lhs).0 {
-                        if let Some(name) = find_value_from_name_registry(&arg_name_registry, &local_name_registry, a) {
-                            rhs.push(SedInstruction::Set(name));
-                            return Ok(rhs);
-                        }
-                        else {
-                            return Err(BuildIRErr { note: "could not find value from the registry." })
-                        }
-                    }
-                    else {
-                        return Err(BuildIRErr { note: "invalid left expresion" });
-                    }
-                }
+                //BinaryOp::Assign => {
+                //    // 重要
+                //    // 左の式は必ず、localでなければならない
+                //    // 代入
+                //    let mut rhs = build_ir(&(*rhs).0, &arg_name_registry, &local_name_registry)?;
+                //    if let Expr::Local(a) = &(*lhs).0 {
+                //        if let Some(name) = find_value_from_name_registry(&arg_name_registry, &local_name_registry, a) {
+                //            rhs.push(SedInstruction::Set(name));
+                //            return Ok(rhs);
+                //        }
+                //        else {
+                //            return Err(BuildIRErr { note: "could not find value from the registry." })
+                //        }
+                //    }
+                //    else {
+                //        return Err(BuildIRErr { note: "invalid left expresion" });
+                //    }
+                //}
             }
         }
         Expr::Neg(a) => {
             return Err(BuildIRErr { note: "not yet" })
         }
         Expr::Return((a, b)) => {
+            // 返り値の型が違うエラー
             let mut ir = vec![];
             for (expr, _span) in a {
                 ir.append(&mut build_ir(
@@ -335,6 +336,24 @@ fn build_ir<'a>(
             }
             ir.push(SedInstruction::Ret);
             return Ok(ir);
+        }
+        Expr::Assign(lhs, rhs) => {
+            let mut rhs_ir = build_ir(&(*rhs).0, &arg_name_registry, &local_name_registry)?;
+
+            for (value, value_span) in (*lhs).0.iter().rev() {
+                if let Expr::Local(a) = &value {
+                        if let Some(name) = find_value_from_name_registry(&arg_name_registry, &local_name_registry, a) {
+                            rhs_ir.push(SedInstruction::Set(name));
+                        }
+                        else {
+                            return Err(BuildIRErr { note: "could not find value from the registry." })
+                        }
+                } else {
+                    // unreachable
+                    return Err(BuildIRErr { note: "invalid left expresion" })
+                }
+            }
+            return Ok(rhs_ir);
         }
     }
 }
@@ -350,7 +369,6 @@ fn op_func_table<'a>(binop: &BinaryOp)-> &'a str
         BinaryOp::Eq => "eq",
         BinaryOp::NotEq => "neq",
         BinaryOp::Mod => "mod",
-        BinaryOp::Assign => "assign"
     }
 }
 
@@ -518,19 +536,6 @@ pub fn mul a:bit32, b:bit32 -> bit32, bit32 {
                                         println!("{}", err.note);
                                     }
                                 }
-                                //match build_ir(
-                                //    &func.body.0,
-                                //    &args_name_dir,
-                                //    &locals_name_dir)
-                                //{
-                                //    Ok(instructions) => {
-                                //        println!("{:#?}", instructions);
-                                //    }
-                                //    Err(err) => {
-                                //        println!("{}", err.note);
-                                //    }
-                                //}
-                                //println!("{:#?}\n{:#?}", locals_name_dir, args_name_dir);
                             }
                     }
                     Err(errs) => {

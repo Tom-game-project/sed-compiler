@@ -153,7 +153,7 @@ dependencies = [
 [[package]]
 name = "sed-compiler-frontend"
 version = "0.1.0"
-source = "git+https://github.com/Tom-game-project/chumsky_example2.git?tag=sed-compiler-v0.1.5-alpha#20736e93d6f3ad3ee3eb1539731349cb701baf11"
+source = "git+https://github.com/Tom-game-project/chumsky_example2.git?tag=sed-compiler-v0.1.6-alpha#c841be5c2760a813aec48c6b109236c3aa7f6588"
 dependencies = [
  "ariadne",
  "chumsky",
