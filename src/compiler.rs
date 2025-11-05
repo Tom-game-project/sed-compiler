@@ -128,19 +128,19 @@ fn create_arg_name_registry<'a>(func: &Func<'a>) -> Result<NameRegistry<TypeArg>
     Ok(name_reg)
 }
 
-fn build_func_ir<'a>(func: &Func<'a>) -> Result<FuncDef, BuildIRErr<'a>>
+fn build_func_ir<'a>(func: &Func<'a>) -> Result<FuncDef, BuildIRErr>
 {
     let mut local_name_registry = if let Ok(a) = 
         create_local_name_registry(&func.body.0){
         a
     }else {
-        return Err(BuildIRErr { note: "failed to create local_name_registry" });
+        return Err(BuildIRErr { note: "failed to create local_name_registry".to_string() });
     };
     let mut arg_name_registry = if let Ok(a)
         = create_arg_name_registry(&func) {
         a
     }else {
-        return Err(BuildIRErr { note: "failed to create arg_name_registry" });
+        return Err(BuildIRErr { note: "failed to create arg_name_registry".to_string() });
     };
     let mut func_def = FuncDef::new(
         func.name,
@@ -170,19 +170,19 @@ fn find_value_from_name_registry(
 }
 
 #[derive(Clone, Debug)]
-struct BuildIRErr<'a>{
-    note: &'a str
+struct BuildIRErr{
+    note: String
 }
 
 fn build_ir<'a>(
     expr: &Expr<'a>,
     arg_name_registry: &NameRegistry<TypeArg>,
     local_name_registry: &NameRegistry<TypeLocal>
-) -> Result<Vec<SedInstruction>, BuildIRErr<'a>>
+) -> Result<Vec<SedInstruction>, BuildIRErr>
 {
     match &expr {
         Expr::Error => {
-            return Err(BuildIRErr { note: "ast contains \"Error\"" })
+            return Err(BuildIRErr { note: "ast contains \"Error\"".to_string() })
         }
         Expr::If(cond, then, else_) => {
             let mut cond_ir =  build_ir(&(*cond).0, arg_name_registry, local_name_registry)?;
@@ -216,7 +216,7 @@ fn build_ir<'a>(
                 return Ok(ir);
             } else {
                 // error
-                return Err(BuildIRErr { note: "could not find value from the registry." })
+                return Err(BuildIRErr { note: format!("could not find value \"{}\" from the registry.", a)})
             }
         }
         Expr::Sed(a) => {
@@ -244,7 +244,7 @@ fn build_ir<'a>(
                 instructions.push(call_name);
             }
             else {
-                return Err(BuildIRErr { note: "function name must be local" })
+                return Err(BuildIRErr { note: "function name must be local".to_string() })
             }
             return Ok(instructions);
         }
@@ -283,7 +283,7 @@ fn build_ir<'a>(
                 return Ok(vec! [SedInstruction::Val(val_number)]);
             } else {
                 // localでかつこれに変数名引数名に該当しない場合は関数
-                return Err(BuildIRErr { note: "context error" })
+                return Err(BuildIRErr { note: "context error".to_string() })
             }
         }
         Expr::Binary(lhs, op, rhs) => {
@@ -323,7 +323,7 @@ fn build_ir<'a>(
             }
         }
         Expr::Neg(a) => {
-            return Err(BuildIRErr { note: "not yet" })
+            return Err(BuildIRErr { note: "not yet".to_string() })
         }
         Expr::Return((a, b)) => {
             // 返り値の型が違うエラー
@@ -346,11 +346,11 @@ fn build_ir<'a>(
                             rhs_ir.push(SedInstruction::Set(name));
                         }
                         else {
-                            return Err(BuildIRErr { note: "could not find value from the registry." })
+                            return Err(BuildIRErr { note: format!("could not find value \"{}\" from the registry.", a)})
                         }
                 } else {
                     // unreachable
-                    return Err(BuildIRErr { note: "invalid left expresion" })
+                    return Err(BuildIRErr { note: "invalid left expresion".to_string() })
                 }
             }
             return Ok(rhs_ir);
@@ -374,7 +374,7 @@ fn op_func_table<'a>(binop: &BinaryOp)-> &'a str
 
 
 /// 
-fn compiler_frontend(code: &str) 
+pub fn compiler_frontend(code: &str) 
     -> Result<CompilerBuilder<code_gen::Unassembled>, BuildIRErr>
 {
         let (tokens, err) = lexer_parse(code);
@@ -395,8 +395,7 @@ fn compiler_frontend(code: &str)
                                         )
                                     }
                                     Err(e) => {
-                                        println!("{}", e.note);
-                                        return Err(BuildIRErr{ note: "this error" });
+                                        return Err(BuildIRErr{ note: format!("{}", e.note) });
                                     }
                                 }
                             }
@@ -418,7 +417,7 @@ fn compiler_frontend(code: &str)
                             .eprint(Source::from(code))
                             .unwrap();
                         }
-                        return Err(BuildIRErr { note: "failed while parsing" });
+                        return Err(BuildIRErr { note: "failed while parsing".to_string() });
                     }
                 }
 
@@ -426,7 +425,7 @@ fn compiler_frontend(code: &str)
             None => {
                 println!("Some Error Occured");
 
-                return Err(BuildIRErr{ note: "failed while tokenize"});
+                return Err(BuildIRErr{ note: "failed while tokenize".to_string()});
             }
         }
 
@@ -438,7 +437,7 @@ mod compiler_test {
     use sed_compiler_frontend::parser::*;
     use ariadne::{Color, Label, Report, ReportKind, Source};
 
-    use super::{build_ir, compiler_frontend};
+    use super::{compiler_frontend};
 
     #[test]
     fn compiler_test00()
@@ -577,7 +576,7 @@ pub fn mul a:bit32, b:bit32 -> bit32, bit32 {
 
                 match generated {
                     Ok(generated_sed_code) => {
-                        let mut edi = "s/.*/~init~init/\n".to_string();
+                        let mut edi = "s/.*/~init~init~init~init/\n".to_string();
                         edi.push_str(&generated_sed_code);
                         fs::write("sed/c_example.sed", edi).expect("書き込みに失敗しました");
                         // println!("{}", generated_sed_code);

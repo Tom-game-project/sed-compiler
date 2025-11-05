@@ -125,26 +125,87 @@ fn is_greater_or_equal a:char -> bool {
     }$
 }
 
-fn headtail a:bit32 -> bool, bool {
+
+fn lstrip0 a:str -> str {
     sed ${
-        "s/~\\([10]\\)[01]*\\([01]\\)/~\\1~\\2;/",
+        "s/~[0]*\\([01]*\\)$/~\\1;/",
+	"s/~;$/~0;/"
     }$
 }
 
+fn headtail a:bit32 -> bool, str {
+    sed ${
+        "s/~\\([10]\\)\\([01]*\\)$/~\\1~\\2;/",
+    }$
+}
+
+
+fn concat_str_1 a:bit32 -> bit33 {
+    sed ${
+        "s/~\\([10]*\\)/~\\11;/",
+    }$
+}
+
+fn concat_str_0 a:bit32 -> bit33 {
+    sed ${
+        "s/~\\([10]*\\)/~\\10;/",
+    }$
+}
+
+fn concat a:str, b:str -> str {
+    sed ${
+        "s/~\\([10]*\\)~\\([10]*\\)/~\\1\\2;/",
+    }$
+}
+
+fn const_none_string -> str {
+    sed ${
+        "s/.*/~;/",
+    }$
+}
+
+fn div_mod_rec N_rem: bit32, Q: bit32, R: bit32, D: bit32 -> bit32, bit32 {
+    let r1 = 0; // init
+    let r2 = 0; // init
+
+    if is_empty(N_rem) {
+        r1 = Q;
+	r2 = R;
+    } else {
+        let head = 0; // init 1bit
+        let tail = 0; // init 1bit
+        
+        let R_next = 0; // init
+        let Q_next = 0; // init
+
+        head, tail = headtail(N_rem);
+        let R_new = lstrip0(concat(R, head));
+        if is_greater_or_equal(relation(zero_padding32(R_new), D)) {
+            R_next = sub32(R_new, D);
+            Q_next = concat_str_1(Q);
+        } else {
+            R_next = R_new;
+            Q_next = concat_str_0(Q);
+        }
+        r1, r2 = div_mod_rec(tail, Q_next, R_next, D)
+    }
+    return r1, r2;
+}
+
 fn const_return -> bit32, bit32 {
-    return 5,101;
+    return 101, 5;
 }
 
-pub fn entry -> bit32, bit32, bit32{
-    let a = 5;
-    let b = 101;
+pub fn entry -> bit32, bit32, bit32 {
+    let a = 0;
+    let b = 0;
+    let r1 = 0;
+    let r2 = 0;
 
-    // return mul(a, add(a, b)), add(a, b);
-    // return twos_complement(a);
-    // return sub32(b, a), a;
-    // return is_greater_or_equal(relation(a, b));
-    // a, b = const_return();
-    // c = sub32(a, b);
-    //
-    return b, sub32(b, a), sub32(a, b);
+    a, b = const_return();
+
+    // r1, r2 = headtail(a); 
+    r1, r2 = div_mod_rec(a, const_none_string(), const_none_string(), b);
+    return const_none_string(), r1, r2;
 }
+

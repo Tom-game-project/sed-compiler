@@ -66,6 +66,28 @@ def div_mod_rec(N_rem: str, Q: str, R: str, D: str) -> (str, str):
         
     return div_mod_rec(N_next, Q_next, R_next, D)
 
+
+def div_mod_rec2(N_rem: str, Q: str, R: str, D: str) -> (str, str):
+    # 終了条件（ベースケース）
+    if is_empty(N_rem):
+        return Q, R
+
+    # 再帰ステップ
+    N_next = tail(N_rem)
+
+    # 余り全体をシフトせず、単純にビットを連結する
+    R_new = concat(R, head(N_rem))
+
+    if is_greater_or_equal(R_new, D):
+        R_next = sub(R_new, D)
+        Q_next = concat(Q, "1")
+    else:
+        R_next = R_new
+        Q_next = concat(Q, "0")
+        
+    return div_mod_rec(N_next, Q_next, R_next, D)
+
+
 def div_mod(numerator: str, divisor: str) -> (str, str):
     if divisor == "0":
         raise ValueError("Cannot divide by zero.")
@@ -73,7 +95,7 @@ def div_mod(numerator: str, divisor: str) -> (str, str):
         return "0", "0"
     
     # 最初の余りの初期値は空文字列 "" で良い
-    quotient, remainder = div_mod_rec(numerator, "", "", divisor)
+    quotient, remainder = div_mod_rec2(numerator, "", "", divisor)
     
     # 商の先頭の不要な0を取り除く
     return quotient.lstrip('0') or '0', remainder
