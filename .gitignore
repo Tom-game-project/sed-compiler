@@ -1,6 +1,7 @@
 /target
 # file
 in.txt
+in
 # vim 
 *.swo
 *.swp

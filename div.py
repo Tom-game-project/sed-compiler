@@ -98,15 +98,18 @@ def div_mod(numerator: str, divisor: str) -> (str, str):
     quotient, remainder = div_mod_rec2(numerator, "", "", divisor)
     
     # 商の先頭の不要な0を取り除く
-    return quotient.lstrip('0') or '0', remainder
+    return quotient.lstrip('0') or '0', remainder.lstrip('0') or '0'
 
 # ================================================================
 # 実行と検証
 # ================================================================
 if __name__ == "__main__":
-    N = "11100100"  # 228
-    D = "1010"      # 10
+    a = 48
+    b = 17
+    N = str(bin(a))[2:]
+    D = str(bin(b))[2:]
     
+    print(f"10進数 div_mod({a}, {b})")
     print(f"div_mod({N}, {D}) を実行します...")
     
     q, r = div_mod(N, D)
@@ -114,7 +117,7 @@ if __name__ == "__main__":
     print(f"  商: {q} (10進数: {int(q, 2)})")
     print(f"  余り: {r} (10進数: {int(r, 2)})")
 
-    assert q == bin(228 // 10)[2:]
-    assert r == bin(228 % 10)[2:]
+    assert q == bin(a // b)[2:]
+    assert r == bin(a % b)[2:]
     print("\n✅ 検算OK")
 
