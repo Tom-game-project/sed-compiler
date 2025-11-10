@@ -713,7 +713,8 @@ fn sedgen_func_def(func_def: &FuncDef, func_table: &[FuncDef]) -> Result<String,
 
     let mut rstr = if is_entry {
         // format!("{}\n", (0..fixed_offset).map(|_| "~init").collect::<String>())
-        "".to_string()
+        let locals_out = (0..func_def.localc).map(|_| "~init").collect::<String>();
+        format!("s/.*/{}/\n", locals_out)
     } else {
         let pattern = format!("\\({}\\)", "~[^\\~]*".repeat(func_def.argc));
         let args_out = "\\1";

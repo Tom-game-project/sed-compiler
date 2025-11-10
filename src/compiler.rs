@@ -576,9 +576,9 @@ pub fn mul a:bit32, b:bit32 -> bit32, bit32 {
 
                 match generated {
                     Ok(generated_sed_code) => {
-                        let mut edi = "s/.*/~init~init~init~init/\n".to_string();
-                        edi.push_str(&generated_sed_code);
-                        fs::write("sed/c_example.sed", edi).expect("書き込みに失敗しました");
+                        //let mut edi = 
+                        //edi.push_str(&generated_sed_code);
+                        fs::write("sed/c_example.sed", generated_sed_code).expect("書き込みに失敗しました");
                         // println!("{}", generated_sed_code);
                     }
                     Err(err) => {

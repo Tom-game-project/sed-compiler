@@ -178,7 +178,7 @@ fn div_mod_rec N_rem: bit32, Q: bit32, R: bit32, D: bit32 -> bit32, bit32 {
 
     if is_empty(N_rem) {
         r1 = Q;
-	r2 = zero_padding32(R);
+        r2 = zero_padding32(R);
     } else {
         let head = 0; // init 1bit
         let tail = 0; // init 1bit
@@ -218,7 +218,7 @@ pub fn gcd a:bit32, b:bit32 -> bit32 {
 
 pub fn entry -> bit32, bit32, bit32 {
     let a = 48;
-    let b = 18;
+    let b = 17;
     let r1 = 0;
     let r2 = 0;
 
