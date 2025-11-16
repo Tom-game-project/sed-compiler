@@ -379,13 +379,13 @@ pub fn compiler_frontend(code: &str)
         match &tokens {
             Some(tokens) => {
                 let parse_result = parser_parse(code, &tokens);
-                println!("{:#?}", parse_result);
+                // println!("{:#?}", parse_result);
                 match parse_result {
                     Ok(a) => {
                         for (func, _) in a {
                                 match build_func_ir(&func) {
                                     Ok(instructions) => {
-                                        println!("{:#?}", instructions);
+                                        // println!("{:#?}", instructions);
                                         compile_builder = compile_builder.add_func(
                                             instructions
                                         )
@@ -566,12 +566,13 @@ pub fn mul a:bit32, b:bit32 -> bit32, bit32 {
         println!("start compiler_test02...");
         match compiler_frontend(&code){
             Ok(compiler_builder) => {
-                let generated = compiler_builder
-                    .assemble()
-                    .generate();
-
+                let assembled = compiler_builder
+                    .assemble();
+                assembled.resolved_show_table();
+                let generated = assembled.generate();
                 match generated {
                     Ok(generated_sed_code) => {
+                        // assembled.
                         //let mut edi = 
                         //edi.push_str(&generated_sed_code);
                         fs::write("sed/c_example.sed", generated_sed_code).expect("書き込みに失敗しました");

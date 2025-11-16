@@ -57,6 +57,10 @@ impl CompilerBuilder<Assembled> {
         println!("Generating sed code...");
         sedgen_func_table(&self.func_table)
     }
+
+    pub fn resolved_show_table(&self) {
+        println!("{:#?}", self.func_table);
+    }
 }
 
 // entryが一つ
@@ -243,7 +247,7 @@ impl CallFunc {
 pub enum CompileErr {
     UndefinedFunction(String),
     StackUnderFlow(String),
-    PoppingValueFromEmptyStack,
+    PoppingValueFromEmptyStack(String),
     Fatal,
 }
 
@@ -605,8 +609,7 @@ fn resolve_ret_instructions(
     fixed_offset: usize,
 ) -> Result<usize, CompileErr> {
     if fixed_offset + func_def.retc > stack_size {
-        println!("@ {}", func_def.name);
-        return Err(CompileErr::PoppingValueFromEmptyStack);
+        return Err(CompileErr::PoppingValueFromEmptyStack(format!("@ {}", func_def.name)));
     }
     let arg_pattern: String = format!(
         "{}\\({}\\)",
@@ -616,6 +619,8 @@ fn resolve_ret_instructions(
     let arg_string = "\\1;";
     rstr.push_str(&format!("s/{}/{}/\n", arg_pattern, arg_string));
     // rstr.push_str("b return_dispatcher\n"); // 最後は必ずreturn
+    let return_label = format!("return{}\n", func_def.id);
+    rstr.push_str(&format!("b {}", return_label));
     Ok(0)
 }
 
@@ -791,12 +796,16 @@ s/\\n\\(.*\\)/\\1/
     )?;
 
     if is_entry {
+        let return_label = format!("return{}", func_def.id);
+        rstr.push_str(&format!(":{}\n", return_label));
         rstr.push_str("b done\n"); // entry return
     } else {
         // TODO リターンdispatcherに巨大なマッチ文を書くのではなく、それぞれの関数が解決する方針について考える
         // rstr.push_str("b return_dispatcher\n"); // 最後は必ずreturn
+        let return_label = format!("return{}", func_def.id);
         rstr.push_str(
-         "
+         &format!("
+:{}
 H
 x
 h
@@ -804,7 +813,8 @@ s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\1/
 x
 s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\2/
 "
-        );
+        ,return_label
+        ));
         if let Some(codes) = tree.get(&func_def.name){
             for return_addr_resolve_code in codes {
                 rstr.push_str(

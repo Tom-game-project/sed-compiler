@@ -217,14 +217,14 @@ pub fn gcd a:bit32, b:bit32 -> bit32 {
 }
 
 pub fn entry -> bit32, bit32, bit32 {
-    let a = 42;
-    let b = 5;
+    let a = 123456789;
+    let b = 987654321;
     let r1 = 0;
     let r2 = 0;
 
-    r1, r2 = divmod(a, b);
-    // r1 = gcd(b, a);
-    // r2 = gcd(a, b);
+    //r1, r2 = divmod(a, b);
+    r1 = gcd(b, a);
+    r2 = gcd(a, b);
 
     return 0, r1, r2;
 }
