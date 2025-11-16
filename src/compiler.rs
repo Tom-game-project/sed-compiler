@@ -63,8 +63,6 @@ impl<T> NameRegistry <T>{
     }
 }
 
-// 上 同じ実装が繰り返されてしまっているのでなんとかする
-
 /// 名前をindexとして解決する
 fn create_local_name_registry<'a>(expr: &Expr<'a>) -> Result<NameRegistry<TypeLocal>, NameRegistryErr>
 {
@@ -130,14 +128,12 @@ fn create_arg_name_registry<'a>(func: &Func<'a>) -> Result<NameRegistry<TypeArg>
 
 fn build_func_ir<'a>(func: &Func<'a>) -> Result<FuncDef, BuildIRErr>
 {
-    let mut local_name_registry = if let Ok(a) = 
-        create_local_name_registry(&func.body.0){
+    let local_name_registry = if let Ok(a) = create_local_name_registry(&func.body.0){
         a
     }else {
         return Err(BuildIRErr { note: "failed to create local_name_registry".to_string() });
     };
-    let mut arg_name_registry = if let Ok(a)
-        = create_arg_name_registry(&func) {
+    let arg_name_registry = if let Ok(a) = create_arg_name_registry(&func) {
         a
     }else {
         return Err(BuildIRErr { note: "failed to create arg_name_registry".to_string() });
@@ -325,7 +321,7 @@ fn build_ir<'a>(
         Expr::Neg(a) => {
             return Err(BuildIRErr { note: "not yet".to_string() })
         }
-        Expr::Return((a, b)) => {
+        Expr::Return((a, span)) => {
             // 返り値の型が違うエラー
             let mut ir = vec![];
             for (expr, _span) in a {
@@ -363,8 +359,8 @@ fn op_func_table<'a>(binop: &BinaryOp)-> &'a str
     // 組み込み関数の名前にする
     match binop {
         BinaryOp::Add => "add",
-        BinaryOp::Sub => "sub",
-        BinaryOp::Mul => "plus",
+        BinaryOp::Sub => "sub32",
+        BinaryOp::Mul => "mul32",
         BinaryOp::Div => "div",
         BinaryOp::Eq => "eq",
         BinaryOp::NotEq => "neq",
@@ -566,7 +562,7 @@ pub fn mul a:bit32, b:bit32 -> bit32, bit32 {
     #[test]
     fn compiler_test02() {
         use std::fs;
-        let code = fs::read_to_string("example.soil").expect("ファイルの読み込みに失敗しました");
+        let code = fs::read_to_string("soil/example.soil").expect("ファイルの読み込みに失敗しました");
         println!("start compiler_test02...");
         match compiler_frontend(&code){
             Ok(compiler_builder) => {
