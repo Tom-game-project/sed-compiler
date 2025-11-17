@@ -40,8 +40,6 @@ impl CompilerBuilder<Unassembled> {
         }
         // ID割り当て、オフセット計算、ラベル解決など
         let consumed = assemble_funcs(&mut self.func_table);
-        println!("func_label_id {}",consumed.func_label_id);
-        println!("if_id {}",consumed.if_id);
         CompilerBuilder {
             func_table: self.func_table,
             consumed_table: consumed,
@@ -54,10 +52,10 @@ impl CompilerBuilder<Unassembled> {
 impl CompilerBuilder<Assembled> {
     /// sedコードを生成する
     pub fn generate(self) -> Result<String, CompileErr> {
-        println!("Generating sed code...");
         sedgen_func_table(&self.func_table)
     }
 
+    /// TODO: debug用関数　後で消す
     pub fn resolved_show_table(&self) {
         println!("{:#?}", self.func_table);
     }
@@ -316,28 +314,6 @@ impl ReturnAddrOffsetResolver for IfProc {
     }
 }
 
-/// 返り値を処理する関数
-fn sedgen_return_dispatcher(func_table: &[FuncDef]) -> Result<String, CompileErr> {
-    let mut rstr = "
-:return_dispatcher
-H
-x
-h
-s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\1/
-x
-s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\2/
-"
-    .to_string();
-
-    let mut rvec = Vec::new();
-    for i in func_table {
-        // ある関数以下での呼び出しをカウント
-        // 呼び出されている関数から、呼び出し元をリストアップしたい
-        rvec.append(&mut i.proc_contents.sedgen_return_dispatcher(func_table)?);
-    }
-    Ok(rstr)
-}
-
 /// 関数ごとに、帰るべき命令列上のアドレスは絞れるので、それらの紹介用ディクショナリを返す
 fn create_return_dispatcher_btree_map(func_table: &[FuncDef]) -> Result<BTreeMap<String, Vec<ReturnAddrResolveCode>>, CompileErr> {
     let mut rdic:BTreeMap<String, Vec<ReturnAddrResolveCode>> = BTreeMap::new();
@@ -464,7 +440,7 @@ impl SetLocalc for IfProc {
 /// |... ArgVal ...|... LocalVal...|[... stack zone ...]
 ///  <---------fixed size -------->| <--  flex size -->
 /// 返り値
-pub trait ResolvePopAndSetProc: Debug {
+pub trait ResolvePopAndSetProc {
     fn resolve_pop_and_set_proc(&self, stack_size: usize, func_def: &FuncDef) -> String;
 }
 
@@ -873,13 +849,11 @@ fn assemble_funcs(func_table: &mut [FuncDef]) -> ConsumedTable {
     let mut label_id = 0;
     for i in &mut *func_table {
 
-        // println!("set id {}", pad);
         pad += i.set_return_addr_offset(pad);
 
         i.id = label_id;
         label_id += 1;
     }
-    // println!("{:#?}", func_table);
 
     // ローカル変数の解決
     for i in &mut *func_table {
