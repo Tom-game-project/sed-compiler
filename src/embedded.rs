@@ -114,7 +114,6 @@ pub fn em_add() -> FuncDef {
     func_add
 }
 
-
 /// you need to define
 /// - twos_complement
 /// - zero_padding32
@@ -134,11 +133,11 @@ pub fn em_sub32() -> FuncDef {
     func_sub32
 }
 
-pub fn em_twos_complement() ->FuncDef {
+pub fn em_twos_complement() -> FuncDef {
     let mut twos_complement = FuncDef::new("twos_complement", 1, 0, 1);
 
-    twos_complement.set_proc_contents(vec![
-        SedInstruction::Sed(SedCode("
+    twos_complement.set_proc_contents(vec![SedInstruction::Sed(SedCode(
+        "
 s/~\\([^\\~]*\\)/\\1/
 y/01/10/
 s/$/+/
@@ -151,20 +150,22 @@ b add_one_loop
 s/^\\+/1/
 
 s/\\(.*\\)/~\\1;/
-".to_string())),
-    ]);
+"
+        .to_string(),
+    ))]);
     twos_complement
 }
 
 pub fn em_zero_padding32() -> FuncDef {
     let mut func_zero_padding32 = FuncDef::new("zero_padding32", 1, 0, 1);
 
-    func_zero_padding32.set_proc_contents(vec![
-        SedInstruction::Sed(SedCode("
+    func_zero_padding32.set_proc_contents(vec![SedInstruction::Sed(SedCode(
+        "
 s/~\\([^\\~]*\\)/\\1/
 s/^/00000000000000000000000000000000/
 s/.*\\(................................\\)$/~\\1;/
-".to_string())),
-    ]);
+"
+        .to_string(),
+    ))]);
     func_zero_padding32
 }

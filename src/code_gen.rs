@@ -3,7 +3,6 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
-
 // compiler state
 pub struct Unassembled;
 pub struct Assembled;
@@ -19,7 +18,10 @@ impl CompilerBuilder<Unassembled> {
     pub fn new() -> Self {
         Self {
             func_table: Vec::new(),
-            consumed_table: ConsumedTable { func_label_id: 0, if_id: 0 },
+            consumed_table: ConsumedTable {
+                func_label_id: 0,
+                if_id: 0,
+            },
             _state: PhantomData,
         }
     }
@@ -33,10 +35,8 @@ impl CompilerBuilder<Unassembled> {
     /// 「組立」処理を実行し、状態を Assembled に遷移させる
     pub fn assemble(mut self) -> CompilerBuilder<Assembled> {
         // entry pointをリストの先頭に配置する
-        if let Some(elem) = self.func_table.pop_if(|a|a.name == "entry") {
-            self.func_table.insert(0, 
-                elem
-            );
+        if let Some(elem) = self.func_table.pop_if(|a| a.name == "entry") {
+            self.func_table.insert(0, elem);
         }
         // ID割り当て、オフセット計算、ラベル解決など
         let consumed = assemble_funcs(&mut self.func_table);
@@ -62,10 +62,10 @@ impl CompilerBuilder<Assembled> {
 }
 
 // entryが一つ
-// 
+//
 // fn link_compile_builder(compiler_builder_list: &[CompilerBuilder<Assembled>]) -> CompilerBuilder<Linked>{
 // }
-// 
+//
 // impl CompilerBuilder<Linked> {
 // }
 
@@ -315,8 +315,10 @@ impl ReturnAddrOffsetResolver for IfProc {
 }
 
 /// 関数ごとに、帰るべき命令列上のアドレスは絞れるので、それらの紹介用ディクショナリを返す
-fn create_return_dispatcher_btree_map(func_table: &[FuncDef]) -> Result<BTreeMap<String, Vec<ReturnAddrResolveCode>>, CompileErr> {
-    let mut rdic:BTreeMap<String, Vec<ReturnAddrResolveCode>> = BTreeMap::new();
+fn create_return_dispatcher_btree_map(
+    func_table: &[FuncDef],
+) -> Result<BTreeMap<String, Vec<ReturnAddrResolveCode>>, CompileErr> {
+    let mut rdic: BTreeMap<String, Vec<ReturnAddrResolveCode>> = BTreeMap::new();
     for i in func_table {
         // ある関数以下での呼び出しをカウント
         // 呼び出されている関数から、呼び出し元をリストアップしたい
@@ -334,17 +336,23 @@ fn create_return_dispatcher_btree_map(func_table: &[FuncDef]) -> Result<BTreeMap
 /// return dispatcherコードの生成
 /// プログラムの呼び出し元を判明させる
 trait SedgenReturnDispatcher {
-    fn sedgen_return_dispatcher(&self, func_table: &[FuncDef]) -> Result<Vec<ReturnAddrResolveCode>, CompileErr>;
+    fn sedgen_return_dispatcher(
+        &self,
+        func_table: &[FuncDef],
+    ) -> Result<Vec<ReturnAddrResolveCode>, CompileErr>;
 }
 
 #[derive(Debug)]
 struct ReturnAddrResolveCode {
     func_name: String,
-    code: String
+    code: String,
 }
 
 impl SedgenReturnDispatcher for SedProgram {
-    fn sedgen_return_dispatcher(&self, func_table: &[FuncDef]) -> Result<Vec<ReturnAddrResolveCode>, CompileErr> {
+    fn sedgen_return_dispatcher(
+        &self,
+        func_table: &[FuncDef],
+    ) -> Result<Vec<ReturnAddrResolveCode>, CompileErr> {
         // let mut rstr = String::from("");
         let mut rvec = Vec::new();
         for j in &**self {
@@ -360,7 +368,10 @@ impl SedgenReturnDispatcher for SedProgram {
 }
 
 impl SedgenReturnDispatcher for CallFunc {
-    fn sedgen_return_dispatcher(&self, func_table: &[FuncDef]) -> Result<Vec<ReturnAddrResolveCode>, CompileErr> {
+    fn sedgen_return_dispatcher(
+        &self,
+        func_table: &[FuncDef],
+    ) -> Result<Vec<ReturnAddrResolveCode>, CompileErr> {
         let func_def = find_function_definition_by_name(&self.func_name, func_table)?;
         let mut rstr = "".to_string();
         let retlabel = self.return_addr_marker.get_retlabel();
@@ -389,13 +400,18 @@ impl SedgenReturnDispatcher for CallFunc {
         }
         rstr.push_str(&format!("b {}\n", retlabel));
         rstr.push_str("}\n");
-        Ok(vec![ReturnAddrResolveCode { func_name: self.func_name.to_string(), code: rstr}])
-
+        Ok(vec![ReturnAddrResolveCode {
+            func_name: self.func_name.to_string(),
+            code: rstr,
+        }])
     }
 }
 
 impl SedgenReturnDispatcher for IfProc {
-    fn sedgen_return_dispatcher(&self, func_table: &[FuncDef]) -> Result<Vec<ReturnAddrResolveCode>, CompileErr> {
+    fn sedgen_return_dispatcher(
+        &self,
+        func_table: &[FuncDef],
+    ) -> Result<Vec<ReturnAddrResolveCode>, CompileErr> {
         let mut rvec = Vec::new();
         rvec.append(&mut self.then_proc.sedgen_return_dispatcher(func_table)?);
         rvec.append(&mut self.else_proc.sedgen_return_dispatcher(func_table)?);
@@ -585,7 +601,10 @@ fn resolve_ret_instructions(
     fixed_offset: usize,
 ) -> Result<usize, CompileErr> {
     if fixed_offset + func_def.retc > stack_size {
-        return Err(CompileErr::PoppingValueFromEmptyStack(format!("@ {}", func_def.name)));
+        return Err(CompileErr::PoppingValueFromEmptyStack(format!(
+            "@ {}",
+            func_def.name
+        )));
     }
     let arg_pattern: String = format!(
         "{}\\({}\\)",
@@ -736,7 +755,11 @@ b {}
     ))
 }
 
-fn sedgen_func_def(func_def: &FuncDef, func_table: &[FuncDef], tree: &BTreeMap<String, Vec<ReturnAddrResolveCode>>) -> Result<String, CompileErr> {
+fn sedgen_func_def(
+    func_def: &FuncDef,
+    func_table: &[FuncDef],
+    tree: &BTreeMap<String, Vec<ReturnAddrResolveCode>>,
+) -> Result<String, CompileErr> {
     let is_entry = func_def.name == "entry";
     let fixed_offset = func_def.argc + func_def.localc;
 
@@ -779,8 +802,8 @@ s/\\n\\(.*\\)/\\1/
         // TODO リターンdispatcherに巨大なマッチ文を書くのではなく、それぞれの関数が解決する方針について考える
         // rstr.push_str("b return_dispatcher\n"); // 最後は必ずreturn
         let return_label = format!("return{}", func_def.id);
-        rstr.push_str(
-         &format!("
+        rstr.push_str(&format!(
+            "
 :{}
 H
 x
@@ -788,14 +811,12 @@ h
 s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\1/
 x
 s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\2/
-"
-        ,return_label
+",
+            return_label
         ));
-        if let Some(codes) = tree.get(&func_def.name){
+        if let Some(codes) = tree.get(&func_def.name) {
             for return_addr_resolve_code in codes {
-                rstr.push_str(
-                    &return_addr_resolve_code.code
-                );
+                rstr.push_str(&return_addr_resolve_code.code);
             }
         } else {
             return Err(CompileErr::Fatal);
@@ -837,7 +858,7 @@ fn resolve_if_label(proc_contents: &mut Vec<SedInstruction>, mut min_id: usize) 
 
 struct ConsumedTable {
     func_label_id: usize,
-    if_id: usize
+    if_id: usize,
 }
 
 /// return addrの決定
@@ -848,7 +869,6 @@ fn assemble_funcs(func_table: &mut [FuncDef]) -> ConsumedTable {
     let mut pad = 0;
     let mut label_id = 0;
     for i in &mut *func_table {
-
         pad += i.set_return_addr_offset(pad);
 
         i.id = label_id;
@@ -867,53 +887,57 @@ fn assemble_funcs(func_table: &mut [FuncDef]) -> ConsumedTable {
         if_min_id = resolve_if_label(&mut i.proc_contents, if_min_id);
     }
 
-    ConsumedTable { 
+    ConsumedTable {
         func_label_id: pad,
-        if_id: if_min_id
+        if_id: if_min_id,
     }
 }
 
 #[cfg(test)]
 mod code_gen_test {
-    use crate::{code_gen::*, embedded::{em_add, em_ends_with_zero, em_mul, em_shift_left1, em_shift_right1, em_is_empty}};
+    use crate::{
+        code_gen::*,
+        embedded::{
+            em_add, em_ends_with_zero, em_is_empty, em_mul, em_shift_left1, em_shift_right1,
+        },
+    };
     #[test]
     fn create_return_dispatcher_btree_map_test00() {
+        let mut entry = FuncDef::new("entry", 0, 2, 1);
+        let func_mul = em_mul();
+        let func_add = em_add();
+        let func_shift_left1 = em_shift_left1();
+        let func_shift_right1 = em_shift_right1();
+        let func_is_empty = em_is_empty();
+        let func_ends_with_zero = em_ends_with_zero();
 
-    let mut entry = FuncDef::new("entry", 0, 2, 1);
-    let func_mul = em_mul();
-    let func_add = em_add();
-    let func_shift_left1 = em_shift_left1();
-    let func_shift_right1 = em_shift_right1();
-    let func_is_empty = em_is_empty();
-    let func_ends_with_zero = em_ends_with_zero();
+        entry.set_proc_contents(vec![
+            SedInstruction::Sed(SedCode("s/.*/~init~init/".to_string())), //ローカル変数の初期化
+            SedInstruction::ConstVal(ConstVal::new("101101110")),
+            SedInstruction::Set(Value::Local(0)),
+            SedInstruction::ConstVal(ConstVal::new("11101110111")),
+            SedInstruction::Set(Value::Local(1)),
+            SedInstruction::Val(Value::Local(0)), // L0
+            SedInstruction::Val(Value::Local(1)), // L0
+            SedInstruction::Call(CallFunc::new("mul")),
+            SedInstruction::Set(Value::Local(0)),
+            SedInstruction::Val(Value::Local(0)),
+            SedInstruction::Ret,
+        ]);
 
-    entry.set_proc_contents(vec![
-        SedInstruction::Sed(SedCode("s/.*/~init~init/".to_string())), //ローカル変数の初期化
-        SedInstruction::ConstVal(ConstVal::new("101101110")),
-        SedInstruction::Set(Value::Local(0)),
-        SedInstruction::ConstVal(ConstVal::new("11101110111")),
-        SedInstruction::Set(Value::Local(1)),
-        SedInstruction::Val(Value::Local(0)), // L0
-        SedInstruction::Val(Value::Local(1)), // L0
-        SedInstruction::Call(CallFunc::new("mul")),
-        SedInstruction::Set(Value::Local(0)),
-        SedInstruction::Val(Value::Local(0)),
-        SedInstruction::Ret
-    ]);
-
-    let func_def_table = vec![
-        entry, 
-        func_mul,
-        func_add,
-        func_shift_left1,
-        func_shift_right1,
-        func_is_empty,
-        func_ends_with_zero
-    ];
-    if let Ok (tree) = create_return_dispatcher_btree_map(&func_def_table){
-        println!("{:#?}", tree);
-    } else {
-        println!("Something wrong");
-    }
+        let func_def_table = vec![
+            entry,
+            func_mul,
+            func_add,
+            func_shift_left1,
+            func_shift_right1,
+            func_is_empty,
+            func_ends_with_zero,
+        ];
+        if let Ok(tree) = create_return_dispatcher_btree_map(&func_def_table) {
+            println!("{:#?}", tree);
+        } else {
+            println!("Something wrong");
+        }
     }
 }

@@ -1,4 +1,9 @@
-use sed_compiler::{code_gen::*, embedded::{em_add, em_ends_with_zero, em_mul, em_sub32, em_twos_complement, em_zero_padding32}};
+use sed_compiler::{
+    code_gen::*,
+    embedded::{
+        em_add, em_ends_with_zero, em_mul, em_sub32, em_twos_complement, em_zero_padding32,
+    },
+};
 
 #[cfg(test)]
 mod gen_test2 {
@@ -53,7 +58,7 @@ fn gen_test_proc00() -> String {
         SedInstruction::Call(CallFunc::new("mul")),
         SedInstruction::Set(Value::Local(0)),
         SedInstruction::Val(Value::Local(0)),
-        SedInstruction::Ret
+        SedInstruction::Ret,
     ]);
 
     let compile_result = CompilerBuilder::new()
@@ -76,7 +81,7 @@ fn gen_test_proc00() -> String {
     }
 }
 
-fn gen_test_proc01() -> String { 
+fn gen_test_proc01() -> String {
     let mut entry = FuncDef::new("entry", 0, 2, 1);
     let twos_complement = em_twos_complement();
     let func_add = em_add();
@@ -127,10 +132,7 @@ fn gen_test_proc01() -> String {
 fn gen_test_proc02() -> String {
     let mut entry = FuncDef::new("entry", 0, 2, 1);
 
-
-    let compile_result = CompilerBuilder::new()
-        .add_func(entry)
-        .assemble().generate();
+    let compile_result = CompilerBuilder::new().add_func(entry).assemble().generate();
 
     match compile_result {
         Ok(code) => code,
