@@ -67,8 +67,8 @@ fn create_local_name_registry<'a>(
 
     match expr {
         Expr::Then(a, b) => {
-            if let Ok(a) = create_local_name_registry(&(*a).0) {
-                if let Ok(b) = create_local_name_registry(&(*b).0) {
+            if let Ok(a) = create_local_name_registry(&a.0) {
+                if let Ok(b) = create_local_name_registry(&b.0) {
                     if let Some(r) = a.merge(b) {
                         name_reg = r;
                     } else {
@@ -82,7 +82,7 @@ fn create_local_name_registry<'a>(
             }
         }
         Expr::If(_, a, b) => {
-            if let Ok(a) = create_local_name_registry(&(*a).0) {
+            if let Ok(a) = create_local_name_registry(&a.0) {
                 if let Some(b_in) = &**b {
                     if let Ok(b) = create_local_name_registry(&b_in.0) {
                         if let Some(r) = a.merge(b) {
@@ -128,7 +128,7 @@ fn build_func_ir<'a>(func: &Func<'a>) -> Result<FuncDef, BuildIRErr> {
             note: "failed to create local_name_registry".to_string(),
         });
     };
-    let arg_name_registry = if let Ok(a) = create_arg_name_registry(&func) {
+    let arg_name_registry = if let Ok(a) = create_arg_name_registry(func) {
         a
     } else {
         return Err(BuildIRErr {
@@ -157,11 +157,7 @@ fn find_value_from_name_registry(
 ) -> Option<code_gen::Value> {
     if let Some(index) = arg_name_registry.get_index(name) {
         Some(code_gen::Value::Arg(index))
-    } else if let Some(index) = local_name_registry.get_index(name) {
-        Some(code_gen::Value::Local(index))
-    } else {
-        None
-    }
+    } else { local_name_registry.get_index(name).map(code_gen::Value::Local) }
 }
 
 #[derive(Clone, Debug)]
@@ -176,14 +172,14 @@ fn build_ir<'a>(
 ) -> Result<Vec<SedInstruction>, BuildIRErr> {
     match &expr {
         Expr::Error => {
-            return Err(BuildIRErr {
+            Err(BuildIRErr {
                 note: "ast contains \"Error\"".to_string(),
-            });
+            })
         }
         Expr::If(cond, then, else_) => {
-            let mut cond_ir = build_ir(&(*cond).0, arg_name_registry, local_name_registry)?;
+            let mut cond_ir = build_ir(&cond.0, arg_name_registry, local_name_registry)?;
             let if_inst = SedInstruction::IfProc(IfProc::new(
-                build_ir(&(*then).0, &arg_name_registry, &local_name_registry)?,
+                build_ir(&then.0, arg_name_registry, local_name_registry)?,
                 if let Some((else_, span)) = &**else_ {
                     build_ir(else_, arg_name_registry, local_name_registry)?
                 } else {
@@ -191,26 +187,26 @@ fn build_ir<'a>(
                 },
             ));
             cond_ir.push(if_inst);
-            return Ok(cond_ir);
+            Ok(cond_ir)
         }
         Expr::Then(a, b) => {
-            let mut a_ir = build_ir(&(*a).0, &arg_name_registry, &local_name_registry)?;
-            let mut b_ir = build_ir(&(*b).0, &arg_name_registry, &local_name_registry)?;
+            let mut a_ir = build_ir(&a.0, arg_name_registry, local_name_registry)?;
+            let mut b_ir = build_ir(&b.0, arg_name_registry, local_name_registry)?;
             a_ir.append(&mut b_ir);
-            return Ok(a_ir);
+            Ok(a_ir)
         }
         Expr::Let(a, b) => {
             if let Some(val_number) =
-                find_value_from_name_registry(&arg_name_registry, &local_name_registry, a)
+                find_value_from_name_registry(arg_name_registry, local_name_registry, a)
             {
-                let mut ir = build_ir(&(*b).0, &arg_name_registry, &local_name_registry)?;
+                let mut ir = build_ir(&b.0, arg_name_registry, local_name_registry)?;
                 ir.push(SedInstruction::Set(val_number));
-                return Ok(ir);
+                Ok(ir)
             } else {
                 // error
-                return Err(BuildIRErr {
+                Err(BuildIRErr {
                     note: format!("could not find value \"{}\" from the registry.", a),
-                });
+                })
             }
         }
         Expr::Sed(a) => {
@@ -223,15 +219,15 @@ fn build_ir<'a>(
                     // error
                 }
             }
-            return Ok(r_inst);
+            Ok(r_inst)
         }
         Expr::Call(a, b) => {
             let mut instructions = vec![];
-            for (expr, _) in &(*b).0 {
-                let mut inst = build_ir(&expr, &arg_name_registry, &local_name_registry)?;
+            for (expr, _) in &b.0 {
+                let mut inst = build_ir(expr, arg_name_registry, local_name_registry)?;
                 instructions.append(&mut inst);
             }
-            if let Expr::Local(name) = &(*a).0 {
+            if let Expr::Local(name) = &a.0 {
                 let call_name = SedInstruction::Call(CallFunc::new(name));
                 instructions.push(call_name);
             } else {
@@ -239,7 +235,7 @@ fn build_ir<'a>(
                     note: "function name must be local".to_string(),
                 });
             }
-            return Ok(instructions);
+            Ok(instructions)
         }
         Expr::Value(a) => {
             let data_inst = match &a {
@@ -256,18 +252,18 @@ fn build_ir<'a>(
                 Value::Int32(i) => SedInstruction::ConstVal(ConstVal::new(&format!("{:032b}", i))),
                 Value::Int64(i) => SedInstruction::ConstVal(ConstVal::new(&format!("{:064b}", i))),
             };
-            return Ok(vec![data_inst]);
+            Ok(vec![data_inst])
         }
         Expr::Local(a) => {
             if let Some(val_number) =
-                find_value_from_name_registry(&arg_name_registry, &local_name_registry, a)
+                find_value_from_name_registry(arg_name_registry, local_name_registry, a)
             {
-                return Ok(vec![SedInstruction::Val(val_number)]);
+                Ok(vec![SedInstruction::Val(val_number)])
             } else {
                 // localでかつこれに変数名引数名に該当しない場合は関数
-                return Err(BuildIRErr {
+                Err(BuildIRErr {
                     note: "context error".to_string(),
-                });
+                })
             }
         }
         Expr::Binary(lhs, op, rhs) => {
@@ -279,11 +275,11 @@ fn build_ir<'a>(
                 | BinaryOp::Mod
                 | BinaryOp::NotEq
                 | BinaryOp::Eq => {
-                    let mut lhs = build_ir(&(*lhs).0, &arg_name_registry, &local_name_registry)?;
-                    let mut rhs = build_ir(&(*rhs).0, &arg_name_registry, &local_name_registry)?;
+                    let mut lhs = build_ir(&lhs.0, arg_name_registry, local_name_registry)?;
+                    let mut rhs = build_ir(&rhs.0, arg_name_registry, local_name_registry)?;
                     lhs.append(&mut rhs);
-                    lhs.push(SedInstruction::Call(CallFunc::new(op_func_table(&op))));
-                    return Ok(lhs);
+                    lhs.push(SedInstruction::Call(CallFunc::new(op_func_table(op))));
+                    Ok(lhs)
                 } //BinaryOp::Assign => {
                   //    // 重要
                   //    // 左の式は必ず、localでなければならない
@@ -305,30 +301,30 @@ fn build_ir<'a>(
             }
         }
         Expr::Neg(a) => {
-            return Err(BuildIRErr {
+            Err(BuildIRErr {
                 note: "not yet".to_string(),
-            });
+            })
         }
         Expr::Return((a, span)) => {
             // 返り値の型が違うエラー
             let mut ir = vec![];
             for (expr, _span) in a {
                 ir.append(&mut build_ir(
-                    &expr,
-                    &arg_name_registry,
-                    &local_name_registry,
+                    expr,
+                    arg_name_registry,
+                    local_name_registry,
                 )?);
             }
             ir.push(SedInstruction::Ret);
-            return Ok(ir);
+            Ok(ir)
         }
         Expr::Assign(lhs, rhs) => {
-            let mut rhs_ir = build_ir(&(*rhs).0, &arg_name_registry, &local_name_registry)?;
+            let mut rhs_ir = build_ir(&rhs.0, arg_name_registry, local_name_registry)?;
 
-            for (value, value_span) in (*lhs).0.iter().rev() {
+            for (value, value_span) in lhs.0.iter().rev() {
                 if let Expr::Local(a) = &value {
                     if let Some(name) =
-                        find_value_from_name_registry(&arg_name_registry, &local_name_registry, a)
+                        find_value_from_name_registry(arg_name_registry, local_name_registry, a)
                     {
                         rhs_ir.push(SedInstruction::Set(name));
                     } else {
@@ -343,7 +339,7 @@ fn build_ir<'a>(
                     });
                 }
             }
-            return Ok(rhs_ir);
+            Ok(rhs_ir)
         }
     }
 }
@@ -368,7 +364,7 @@ pub fn compiler_frontend(code: &str) -> Result<CompilerBuilder<code_gen::Unassem
 
     match &tokens {
         Some(tokens) => {
-            let parse_result = parser_parse(code, &tokens);
+            let parse_result = parser_parse(code, tokens);
             // println!("{:#?}", parse_result);
             match parse_result {
                 Ok(a) => {
@@ -380,12 +376,12 @@ pub fn compiler_frontend(code: &str) -> Result<CompilerBuilder<code_gen::Unassem
                             }
                             Err(e) => {
                                 return Err(BuildIRErr {
-                                    note: format!("{}", e.note),
+                                    note: e.note.to_string(),
                                 });
                             }
                         }
                     }
-                    return Ok(compile_builder);
+                    Ok(compile_builder)
                 }
                 Err(errs) => {
                     println!("{:#?}", errs);
@@ -405,18 +401,18 @@ pub fn compiler_frontend(code: &str) -> Result<CompilerBuilder<code_gen::Unassem
                             .eprint(Source::from(code))
                             .unwrap();
                     }
-                    return Err(BuildIRErr {
+                    Err(BuildIRErr {
                         note: "failed while parsing".to_string(),
-                    });
+                    })
                 }
             }
         }
         None => {
             println!("Some Error Occured");
 
-            return Err(BuildIRErr {
+            Err(BuildIRErr {
                 note: "failed while tokenize".to_string(),
-            });
+            })
         }
     }
 }

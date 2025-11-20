@@ -14,6 +14,12 @@ pub struct CompilerBuilder<State> {
     _state: PhantomData<State>,
 }
 
+impl Default for CompilerBuilder<Unassembled> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl CompilerBuilder<Unassembled> {
     pub fn new() -> Self {
         Self {
@@ -387,7 +393,7 @@ impl SedgenReturnDispatcher for CallFunc {
                 rstr.push_str(&format!(
                     "\\({}{}\\)",
                     "~[^\\~]*".repeat(self.localc - 1),
-                    "~[^\\|]*".repeat(1)
+                    "~[^\\|]*"
                 ));
             } else {
                 rstr.push_str("\\(\\)");
@@ -481,10 +487,10 @@ fn find_function_definition_by_name<'a>(
     name: &str,
     func_table: &'a [FuncDef],
 ) -> Result<&'a FuncDef, CompileErr> {
-    if let Some(func_def) = func_table.iter().find(|f| f.name == name.to_string()) {
+    if let Some(func_def) = func_table.iter().find(|f| f.name == name) {
         Ok(func_def)
     } else {
-        Err(CompileErr::UndefinedFunction(format!("{}", name)))
+        Err(CompileErr::UndefinedFunction(name.to_string()))
     }
 }
 
@@ -627,7 +633,7 @@ fn resolve_if_instructions(
     func_table: &[FuncDef],
 ) -> Result<usize, CompileErr> {
     // if scope内では入る前のstack size以下になってはいけない
-    stack_size = stack_size - 1;
+    stack_size -= 1;
     let then_stack_size = stack_size; // fixed
     let else_stack_size = stack_size; // fixed
     let mut then_code = String::new();
@@ -682,7 +688,7 @@ fn resolve_instructions(
     mut stack_size: usize,
     func_table: &[FuncDef],
 ) -> Result<usize, CompileErr> {
-    stack_size = stack_size + fixed_offset;
+    stack_size += fixed_offset;
     for instruction in proc_contents {
         stack_size = match instruction {
             SedInstruction::Sed(sed) => resolve_sed_instruction(rstr, sed, stack_size),
@@ -829,7 +835,7 @@ s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\2/
 /// 関数のテーブルを作成する
 fn sedgen_func_table(func_table: &[FuncDef]) -> Result<String, CompileErr> {
     let mut rstr = "".to_string();
-    let tree = create_return_dispatcher_btree_map(&func_table)?;
+    let tree = create_return_dispatcher_btree_map(func_table)?;
     for i in func_table {
         let code = sedgen_func_def(i, func_table, &tree)?;
         rstr.push_str(&code);
