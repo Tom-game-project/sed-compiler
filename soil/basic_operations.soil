@@ -58,17 +58,15 @@ pub fn add a:bit32, b:bit32 -> bit32 {
 }
 
 pub fn mul a:bit32, b:bit32 -> bit32 {
-    let r = 0;
     if is_empty(b) {
-        r = 0;
+        return 0;
     } else {
         if ends_with_zero(b) {
-            r = mul(shift_left1(a), shift_right1(b));
+            return mul(shift_left1(a), shift_right1(b));
         } else {
-            r = add(a, mul(shift_left1(a), shift_right1(b)));
+            return add(a, mul(shift_left1(a), shift_right1(b)));
         }
     }
-    return r;
 }
 
 fn twos_complement a:bit32 -> bit32 {
@@ -173,12 +171,8 @@ fn const_none_string -> str {
 }
 
 fn div_mod_rec N_rem: bit32, Q: bit32, R: bit32, D: bit32 -> bit32, bit32 {
-    let r1 = 0; // init
-    let r2 = 0; // init
-
     if is_empty(N_rem) {
-        r1 = Q;
-        r2 = zero_padding32(R);
+	return Q, zero_padding32(R);
     } else {
         let head = 0; // init 1bit
         let tail = 0; // init 1bit
@@ -195,9 +189,8 @@ fn div_mod_rec N_rem: bit32, Q: bit32, R: bit32, D: bit32 -> bit32, bit32 {
             R_next = R_new;
             Q_next = concat_str_0(Q);
         }
-        r1, r2 = div_mod_rec(tail, Q_next, lstrip0(R_next), D)
+        return div_mod_rec(tail, Q_next, lstrip0(R_next), D);
     }
-    return r1, r2;
 }
 
 pub fn divmod a:bit32, b:bit32 -> bit32, bit32 {
@@ -216,15 +209,12 @@ pub fn gcd a:bit32, b:bit32 -> bit32 {
     }
 }
 
-pub fn entry -> bit32, bit32, bit32 {
-    let a = 987654321;
-    let b = 123456789;
+pub fn entry a:bit32, b:bit32 -> bit32, bit32, bit32 {
     let r1 = 0;
     let r2 = 0;
 
-    r1, r2 = divmod(a, b);
-    // r1 = gcd(b, a);
-    // r2 = gcd(a, b);
+    r1 = gcd(b, a);
+    r2 = gcd(a, b);
 
     return 0, r1, r2;
 }

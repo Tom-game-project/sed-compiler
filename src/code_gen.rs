@@ -770,9 +770,10 @@ fn sedgen_func_def(
     let fixed_offset = func_def.argc + func_def.localc;
 
     let mut rstr = if is_entry {
-        // format!("{}\n", (0..fixed_offset).map(|_| "~init").collect::<String>())
+        // 引数も考慮する
+        let pattern = format!("\\({}\\)", "~[^\\~]*".repeat(func_def.argc));
         let locals_out = (0..func_def.localc).map(|_| "~init").collect::<String>();
-        format!("s/.*/{}/\n", locals_out)
+        format!("s/{}/\\1{}/\n", pattern, locals_out)
     } else {
         let pattern = format!("\\({}\\)", "~[^\\~]*".repeat(func_def.argc));
         let args_out = "\\1";

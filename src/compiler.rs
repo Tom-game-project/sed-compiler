@@ -161,8 +161,8 @@ fn find_value_from_name_registry(
 }
 
 #[derive(Clone, Debug)]
-struct BuildIRErr {
-    note: String,
+pub struct BuildIRErr {
+    pub note: String,
 }
 
 fn build_ir<'a>(
@@ -562,7 +562,7 @@ pub fn mul a:bit32, b:bit32 -> bit32, bit32 {
     fn compiler_test02() {
         use std::fs;
         let code =
-            fs::read_to_string("soil/example.soil").expect("ファイルの読み込みに失敗しました");
+            fs::read_to_string("soil/basic_operations.soil").expect("ファイルの読み込みに失敗しました");
         println!("start compiler_test02...");
         match compiler_frontend(&code) {
             Ok(compiler_builder) => {
@@ -574,7 +574,7 @@ pub fn mul a:bit32, b:bit32 -> bit32, bit32 {
                         // assembled.
                         //let mut edi =
                         //edi.push_str(&generated_sed_code);
-                        fs::write("sed/c_example.sed", generated_sed_code)
+                        fs::write("sed/basic_operations.sed", generated_sed_code)
                             .expect("書き込みに失敗しました");
                         // println!("{}", generated_sed_code);
                     }
