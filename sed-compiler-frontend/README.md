@@ -1,4 +1,4 @@
-# Language
+# Soil Language
 
 ```
 pub fn name_hello a:num, b:num, c:string -> bool {
