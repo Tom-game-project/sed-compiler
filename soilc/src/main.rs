@@ -1,4 +1,6 @@
-use sed_compiler::*;
+use sed_compiler::{
+    compiler::{compiler_frontend},
+};
 
 use clap::Parser;
 
@@ -25,8 +27,36 @@ fn main() {
     // 引数を解析して構造体に変換
     let args = Args::parse();
 
-    // 解析された値を使う
-    if args.verbose {
-        println!("soil file {} -> sed file {}", args.input, args.output);
+    let code = 
+        std::fs::read_to_string(args.input)
+        .expect("Failed to Open File"); // TODO: ファイルオープンの失敗を処理
+
+    // ソースに基づいてIRを生成する
+    // CompileBuilderの中に中間表現IRの情報を含む
+    let r_ir = compiler_frontend(&code);
+
+    match  r_ir {
+        Ok(compiler_builder) => {
+            // リターンアドレス、ラベルの解決をする
+            let assembled = compiler_builder.assemble();
+            // 解決済みのIRを表示する
+            if args.verbose {
+                assembled.resolved_show_table();
+            }
+            // 解決の終わったIRからsedスクリプトを生成する
+            let generated = assembled.generate();
+            match generated {
+                Ok(generated_sed_code) => {
+                    std::fs::write(args.output, generated_sed_code)
+                        .expect("Failed to write file");
+                }
+                Err(err) => {
+                    println!("{:?}", err);
+                }
+            }
+        }
+        Err(err) => {
+            println!("{:?}", err);
+        }
     }
 }

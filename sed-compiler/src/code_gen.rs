@@ -38,7 +38,8 @@ impl CompilerBuilder<Unassembled> {
         self
     }
 
-    /// 「組立」処理を実行し、状態を Assembled に遷移させる
+    /// ID割り当て、オフセット計算、ラベル解決などを行う
+    /// 状態を Assembled に遷移させる
     pub fn assemble(mut self) -> CompilerBuilder<Assembled> {
         // entry pointをリストの先頭に配置する
         if let Some(elem) = self.func_table.pop_if(|a| a.name == "entry") {
