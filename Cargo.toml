@@ -1,2 +1,2 @@
 [workspace]
-members = ["sed-compiler", "sed-compiler-frontend"]
+members = ["sed-compiler", "sed-compiler-frontend", "soilc"]
