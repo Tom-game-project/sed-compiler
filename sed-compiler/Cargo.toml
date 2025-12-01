@@ -2,6 +2,7 @@
 name = "sed-compiler"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [dependencies]
 sed-compiler-frontend = { path="../sed-compiler-frontend" }

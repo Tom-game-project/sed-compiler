@@ -1,6 +1,4 @@
-use sed_compiler::{
-    compiler::{compiler_frontend},
-};
+use sed_compiler::compiler::compiler_frontend;
 
 use clap::Parser;
 
@@ -35,7 +33,7 @@ fn main() {
     // CompileBuilderの中に中間表現IRの情報を含む
     let r_ir = compiler_frontend(&code);
 
-    match  r_ir {
+    match r_ir {
         Ok(compiler_builder) => {
             // リターンアドレス、ラベルの解決をする
             let assembled = compiler_builder.assemble();

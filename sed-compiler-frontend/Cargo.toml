@@ -2,6 +2,7 @@
 name = "sed-compiler-frontend"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [dependencies]
 chumsky = "0.11.1"
