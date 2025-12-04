@@ -1,7 +1,7 @@
 use std::{collections::HashSet, marker::PhantomData, vec};
 
 use crate::code_gen::{
-    self, CallFunc, CompilerBuilder, ConstVal, FuncDef, IfProc, SedCode, SedInstruction,
+    self, CallFunc, CompilerBuilder, ConstVal, FuncDef, IfProc, SedCode, SoilIRInstruction,
 };
 use sed_compiler_frontend::parser::*;
 
@@ -169,7 +169,7 @@ fn build_ir<'a>(
     expr: &Expr<'a>,
     arg_name_registry: &NameRegistry<TypeArg>,
     local_name_registry: &NameRegistry<TypeLocal>,
-) -> Result<Vec<SedInstruction>, BuildIRErr> {
+) -> Result<Vec<SoilIRInstruction>, BuildIRErr> {
     match &expr {
         Expr::Error => {
             Err(BuildIRErr {
@@ -178,7 +178,7 @@ fn build_ir<'a>(
         }
         Expr::If(cond, then, else_) => {
             let mut cond_ir = build_ir(&cond.0, arg_name_registry, local_name_registry)?;
-            let if_inst = SedInstruction::IfProc(IfProc::new(
+            let if_inst = SoilIRInstruction::IfProc(IfProc::new(
                 build_ir(&then.0, arg_name_registry, local_name_registry)?,
                 if let Some((else_, span)) = &**else_ {
                     build_ir(else_, arg_name_registry, local_name_registry)?
@@ -200,7 +200,7 @@ fn build_ir<'a>(
                 find_value_from_name_registry(arg_name_registry, local_name_registry, a)
             {
                 let mut ir = build_ir(&b.0, arg_name_registry, local_name_registry)?;
-                ir.push(SedInstruction::Set(val_number));
+                ir.push(SoilIRInstruction::Set(val_number));
                 Ok(ir)
             } else {
                 // error
@@ -214,7 +214,7 @@ fn build_ir<'a>(
             let mut r_inst = vec![];
             for i in &a.code {
                 if let Value::Str(sed_code) = i {
-                    r_inst.push(SedInstruction::Sed(SedCode(sed_code.to_string())));
+                    r_inst.push(SoilIRInstruction::Sed(SedCode(sed_code.to_string())));
                 } else {
                     // error
                 }
@@ -228,7 +228,7 @@ fn build_ir<'a>(
                 instructions.append(&mut inst);
             }
             if let Expr::Local(name) = &a.0 {
-                let call_name = SedInstruction::Call(CallFunc::new(name));
+                let call_name = SoilIRInstruction::Call(CallFunc::new(name));
                 instructions.push(call_name);
             } else {
                 return Err(BuildIRErr {
@@ -239,18 +239,18 @@ fn build_ir<'a>(
         }
         Expr::Value(a) => {
             let data_inst = match &a {
-                Value::Null => SedInstruction::ConstVal(ConstVal::new("0")),
+                Value::Null => SoilIRInstruction::ConstVal(ConstVal::new("0")),
                 Value::Bool(b) => {
                     if *b {
-                        SedInstruction::ConstVal(ConstVal::new("1"))
+                        SoilIRInstruction::ConstVal(ConstVal::new("1"))
                     } else {
-                        SedInstruction::ConstVal(ConstVal::new("0"))
+                        SoilIRInstruction::ConstVal(ConstVal::new("0"))
                     }
                 }
-                Value::Str(data) => SedInstruction::ConstVal(ConstVal::new(data)),
-                Value::Func(name) => SedInstruction::Call(CallFunc::new(name)),
-                Value::Int32(i) => SedInstruction::ConstVal(ConstVal::new(&format!("{:032b}", i))),
-                Value::Int64(i) => SedInstruction::ConstVal(ConstVal::new(&format!("{:064b}", i))),
+                Value::Str(data) => SoilIRInstruction::ConstVal(ConstVal::new(data)),
+                Value::Func(name) => SoilIRInstruction::Call(CallFunc::new(name)),
+                Value::Int32(i) => SoilIRInstruction::ConstVal(ConstVal::new(&format!("{:032b}", i))),
+                Value::Int64(i) => SoilIRInstruction::ConstVal(ConstVal::new(&format!("{:064b}", i))),
             };
             Ok(vec![data_inst])
         }
@@ -258,7 +258,7 @@ fn build_ir<'a>(
             if let Some(val_number) =
                 find_value_from_name_registry(arg_name_registry, local_name_registry, a)
             {
-                Ok(vec![SedInstruction::Val(val_number)])
+                Ok(vec![SoilIRInstruction::Val(val_number)])
             } else {
                 // localでかつこれに変数名引数名に該当しない場合は関数
                 Err(BuildIRErr {
@@ -278,7 +278,7 @@ fn build_ir<'a>(
                     let mut lhs = build_ir(&lhs.0, arg_name_registry, local_name_registry)?;
                     let mut rhs = build_ir(&rhs.0, arg_name_registry, local_name_registry)?;
                     lhs.append(&mut rhs);
-                    lhs.push(SedInstruction::Call(CallFunc::new(op_func_table(op))));
+                    lhs.push(SoilIRInstruction::Call(CallFunc::new(op_func_table(op))));
                     Ok(lhs)
                 } //BinaryOp::Assign => {
                   //    // 重要
@@ -315,7 +315,7 @@ fn build_ir<'a>(
                     local_name_registry,
                 )?);
             }
-            ir.push(SedInstruction::Ret);
+            ir.push(SoilIRInstruction::Ret);
             Ok(ir)
         }
         Expr::Assign(lhs, rhs) => {
@@ -326,7 +326,7 @@ fn build_ir<'a>(
                     if let Some(name) =
                         find_value_from_name_registry(arg_name_registry, local_name_registry, a)
                     {
-                        rhs_ir.push(SedInstruction::Set(name));
+                        rhs_ir.push(SoilIRInstruction::Set(name));
                     } else {
                         return Err(BuildIRErr {
                             note: format!("could not find value \"{}\" from the registry.", a),

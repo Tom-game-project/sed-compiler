@@ -1,13 +1,22 @@
+/// code_gen.rs 
+///
+/// code_genにおいて、内部の中間表現(IR)はwasmやforthのようなスタック指向のランタイムのように設計しています。
+/// 具体的にはSoilIR構造体がその役割を果たします。
+/// 関数や条件分岐にはsedのラベルを使います。ラベルの重複を防ぐために、IRのツリーを再帰的に探索して解決します。
+/// 具体的にはCompilerBuilder<Unassembled>のassembleが諸々の解決をします。
+///
+
 use std::collections::BTreeMap;
 use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::ops::{Deref, DerefMut};
 
-// compiler state
+// CompilerBuilder state
 pub struct Unassembled;
 pub struct Assembled;
 pub struct Linked;
 
+/// 
 pub struct CompilerBuilder<State> {
     func_table: Vec<FuncDef>,
     consumed_table: ConsumedTable,
@@ -46,7 +55,37 @@ impl CompilerBuilder<Unassembled> {
             self.func_table.insert(0, elem);
         }
         // ID割り当て、オフセット計算、ラベル解決など
-        let consumed = assemble_funcs(&mut self.func_table);
+        
+        // return addrの決定
+        // 関数を集めて、
+        // return アドレス(ラベル)、
+        // 関数のラベルも解決する
+        let mut pad = 0;
+        let mut label_id = 0;
+        for i in &mut *self.func_table {
+            pad += i.set_return_addr_offset(pad);
+
+            i.id = label_id;
+            label_id += 1;
+        }
+
+        // ローカル変数の解決
+        for i in &mut *self.func_table {
+            i.proc_contents.set_localc(i.localc + i.argc);
+        }
+
+        // ifスコープのラベル解決
+        let mut if_min_id = 0;
+
+        for i in &mut *self.func_table {
+            if_min_id = resolve_if_label(&mut i.proc_contents, if_min_id);
+        }
+
+        let consumed = ConsumedTable {
+            func_label_id: pad,
+            if_id: if_min_id,
+        };
+
         CompilerBuilder {
             func_table: self.func_table,
             consumed_table: consumed,
@@ -59,7 +98,14 @@ impl CompilerBuilder<Unassembled> {
 impl CompilerBuilder<Assembled> {
     /// sedコードを生成する
     pub fn generate(self) -> Result<String, CompileErr> {
-        sedgen_func_table(&self.func_table)
+        let mut rstr = "".to_string();
+        let tree = create_return_dispatcher_btree_map(&self.func_table)?;
+        for i in &self.func_table {
+            let code = sedgen_func_def(i, &self.func_table, &tree)?;
+            rstr.push_str(&code);
+        }
+        rstr.push_str(":done");
+        Ok(rstr)
     }
 
     /// TODO: debug用関数　後で消す
@@ -67,14 +113,6 @@ impl CompilerBuilder<Assembled> {
         println!("{:#?}", self.func_table);
     }
 }
-
-// entryが一つ
-//
-// fn link_compile_builder(compiler_builder_list: &[CompilerBuilder<Assembled>]) -> CompilerBuilder<Linked>{
-// }
-//
-// impl CompilerBuilder<Linked> {
-// }
 
 /// この関数を使ってreturnアドレスを保存する
 #[derive(Debug)]
@@ -92,25 +130,26 @@ impl ReturnAddrMarker {
 #[derive(Debug)]
 pub struct SedCode(pub String);
 
+/// 
 #[derive(Debug)]
-struct SedProgram(Vec<SedInstruction>);
+struct SoilIR(Vec<SoilIRInstruction>);
 
-impl Deref for SedProgram {
-    type Target = Vec<SedInstruction>;
+impl Deref for SoilIR {
+    type Target = Vec<SoilIRInstruction>;
 
     fn deref(&self) -> &Self::Target {
         &self.0
     }
 }
 
-impl DerefMut for SedProgram {
+impl DerefMut for SoilIR {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.0
     }
 }
 
 #[derive(Debug)]
-pub enum SedInstruction {
+pub enum SoilIRInstruction {
     /// 生のSedプログラム
     Sed(SedCode),
     Val(Value),
@@ -136,16 +175,16 @@ pub enum Value {
 #[derive(Debug)]
 pub struct IfProc {
     id: usize, // ラベルを決定するために使う
-    then_proc: SedProgram,
-    else_proc: SedProgram,
+    then_proc: SoilIR,
+    else_proc: SoilIR,
 }
 
 impl IfProc {
-    pub fn new(then_proc: Vec<SedInstruction>, else_proc: Vec<SedInstruction>) -> Self {
+    pub fn new(then_proc: Vec<SoilIRInstruction>, else_proc: Vec<SoilIRInstruction>) -> Self {
         Self {
             id: 0,
-            then_proc: SedProgram(then_proc),
-            else_proc: SedProgram(else_proc),
+            then_proc: SoilIR(then_proc),
+            else_proc: SoilIR(else_proc),
         }
     }
 
@@ -189,13 +228,13 @@ impl ConstVal {
 
 #[derive(Debug)]
 pub struct FuncDef {
-    name: String, //
+    name: String, // function name
     id: usize,
     argc: usize,   // 引数の個数
     localc: usize, // ローカル変数の個数
     retc: usize,   // 返り値の個数
     return_addr_offset: ReturnAddrMarker,
-    proc_contents: SedProgram,
+    proc_contents: SoilIR,
     arg_list: Vec<ArgVal>,
     local_list: Vec<LocalVal>,
 }
@@ -209,17 +248,16 @@ impl FuncDef {
             localc,
             retc,
             return_addr_offset: ReturnAddrMarker(0),
-            proc_contents: SedProgram(vec![]),
+            proc_contents: SoilIR(vec![]),
             arg_list: (0..argc).map(ArgVal::new).collect(),
             local_list: (0..localc).map(LocalVal::new).collect(),
         }
     }
 
     /// 関数の内容がセットされ、更に,callにはreturn_addr_markerが0から1ずつインクリメントして設定される
-    pub fn set_proc_contents(&mut self, proc_contents: Vec<SedInstruction>) -> usize {
-        self.proc_contents = SedProgram(proc_contents);
-        let counter = 0;
-        self.setup_proc_contents(counter)
+    pub fn set_proc_contents(&mut self, proc_contents: Vec<SoilIRInstruction>) -> usize {
+        self.proc_contents = SoilIR(proc_contents);
+        self.setup_proc_contents(0)
     }
 
     fn get_funclabel(&self) -> String {
@@ -260,23 +298,25 @@ pub enum CompileErr {
 //                                 ここから 共通実装
 // =========================================================================================
 
-/// 命令リストが設定されたときの最初のセットアップ
 /// returnアドレス解決のためのトレイト
-/// proc_contentsのような構造を含む場合に必ず必要になってくるので、
 trait ReturnAddrOffsetResolver {
-    /// 命令列がセットされた直後にリターンアドレスをセットします。
+    /// 中間表現SoilIRが設定された直後にリターンアドレスをセットします。
+    ///
+    /// 関数の内部実装でcallが使われている部分を0からのカウントしナンバリングします。
     fn setup_proc_contents(&mut self, counter: usize) -> usize;
     /// 実行可能なプログラムを生成する前に、リターンアドレスの解決をします
+    ///
+    /// 他の関数と
     fn set_return_addr_offset(&mut self, offset: usize) -> usize;
 }
 
-impl ReturnAddrOffsetResolver for SedProgram {
+impl ReturnAddrOffsetResolver for SoilIR {
     fn setup_proc_contents(&mut self, mut counter: usize) -> usize {
         for i in &mut **self {
-            if let SedInstruction::Call(f) = i {
+            if let SoilIRInstruction::Call(f) = i {
                 f.return_addr_marker = ReturnAddrMarker(counter);
                 counter += 1;
-            } else if let SedInstruction::IfProc(if_proc) = i {
+            } else if let SoilIRInstruction::IfProc(if_proc) = i {
                 counter = if_proc.setup_proc_contents(counter);
             }
         }
@@ -286,10 +326,10 @@ impl ReturnAddrOffsetResolver for SedProgram {
     fn set_return_addr_offset(&mut self, offset: usize) -> usize {
         let mut counter = 0;
         for i in &mut **self {
-            if let SedInstruction::Call(a) = i {
+            if let SoilIRInstruction::Call(a) = i {
                 a.return_addr_marker.incr(offset);
                 counter += 1;
-            } else if let SedInstruction::IfProc(if_proc) = i {
+            } else if let SoilIRInstruction::IfProc(if_proc) = i {
                 counter += if_proc.set_return_addr_offset(offset);
             }
         }
@@ -355,18 +395,16 @@ struct ReturnAddrResolveCode {
     code: String,
 }
 
-impl SedgenReturnDispatcher for SedProgram {
+impl SedgenReturnDispatcher for SoilIR {
     fn sedgen_return_dispatcher(
         &self,
         func_table: &[FuncDef],
     ) -> Result<Vec<ReturnAddrResolveCode>, CompileErr> {
-        // let mut rstr = String::from("");
         let mut rvec = Vec::new();
         for j in &**self {
-            if let SedInstruction::Call(f) = j {
+            if let SoilIRInstruction::Call(f) = j {
                 rvec.append(&mut f.sedgen_return_dispatcher(func_table)?);
-                // rstr.push_str(&f.sedgen_return_dispatcher(func_table)?);
-            } else if let SedInstruction::IfProc(if_proc) = j {
+            } else if let SoilIRInstruction::IfProc(if_proc) = j {
                 rvec.append(&mut if_proc.sedgen_return_dispatcher(func_table)?);
             }
         }
@@ -426,16 +464,17 @@ impl SedgenReturnDispatcher for IfProc {
     }
 }
 
+/// 引数とローカル変数のスタックフレーム内で占有する
 trait SetLocalc {
     fn set_localc(&mut self, localc: usize);
 }
 
-impl SetLocalc for SedProgram {
+impl SetLocalc for SoilIR {
     fn set_localc(&mut self, localc: usize) {
         for j in &mut **self {
-            if let SedInstruction::Call(call_func) = j {
+            if let SoilIRInstruction::Call(call_func) = j {
                 call_func.set_localc(localc);
-            } else if let SedInstruction::IfProc(if_proc) = j {
+            } else if let SoilIRInstruction::IfProc(if_proc) = j {
                 if_proc.set_localc(localc);
             }
         }
@@ -458,7 +497,6 @@ impl SetLocalc for IfProc {
     }
 }
 
-// 引数とローカル変数
 
 /// |... ArgVal ...|... LocalVal...|[... stack zone ...]
 ///  <---------fixed size -------->| <--  flex size -->
@@ -684,7 +722,7 @@ b {endif_label}
 fn resolve_instructions(
     rstr: &mut String,
     func_def: &FuncDef,
-    proc_contents: &[SedInstruction], // 命令列
+    proc_contents: &[SoilIRInstruction], // 命令列
     fixed_offset: usize,
     mut stack_size: usize,
     func_table: &[FuncDef],
@@ -692,11 +730,11 @@ fn resolve_instructions(
     stack_size += fixed_offset;
     for instruction in proc_contents {
         stack_size = match instruction {
-            SedInstruction::Sed(sed) => resolve_sed_instruction(rstr, sed, stack_size),
-            SedInstruction::Call(func_call) => {
+            SoilIRInstruction::Sed(sed) => resolve_sed_instruction(rstr, sed, stack_size),
+            SoilIRInstruction::Call(func_call) => {
                 resolve_call_instruction(rstr, func_call, func_table, stack_size)?
             }
-            SedInstruction::Val(a) => match *a {
+            SoilIRInstruction::Val(a) => match *a {
                 Value::Arg(index) => {
                     resolve_argval_instruction(rstr, &func_def.arg_list[index], stack_size)
                 }
@@ -707,8 +745,8 @@ fn resolve_instructions(
                     stack_size,
                 ),
             },
-            SedInstruction::ConstVal(a) => resolve_constval_instruction(rstr, a, stack_size),
-            SedInstruction::Set(a) => resolve_set_instruction(
+            SoilIRInstruction::ConstVal(a) => resolve_constval_instruction(rstr, a, stack_size),
+            SoilIRInstruction::Set(a) => resolve_set_instruction(
                 rstr,
                 match *a {
                     Value::Local(index) => &func_def.local_list[index],
@@ -718,10 +756,10 @@ fn resolve_instructions(
                 fixed_offset,
                 stack_size,
             )?,
-            SedInstruction::IfProc(a) => {
+            SoilIRInstruction::IfProc(a) => {
                 resolve_if_instructions(rstr, a, func_def, stack_size, func_table)?
             }
-            SedInstruction::Ret => {
+            SoilIRInstruction::Ret => {
                 resolve_ret_instructions(rstr, func_def, stack_size, fixed_offset)?
             }
         };
@@ -833,28 +871,12 @@ s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\2/
     Ok(rstr)
 }
 
-/// この関数を呼び出す前に必ずassemble_funcsを実行しfunc_tableの設定を終わらせる必要がある
-/// 関数のテーブルを作成する
-fn sedgen_func_table(func_table: &[FuncDef]) -> Result<String, CompileErr> {
-    let mut rstr = "".to_string();
-    let tree = create_return_dispatcher_btree_map(func_table)?;
-    for i in func_table {
-        let code = sedgen_func_def(i, func_table, &tree)?;
-        rstr.push_str(&code);
-    }
-    // === return dispatcher section === // TODO後でこの巨大なマッチ文は取り除く
-    // let code = sedgen_return_dispatcher(func_table)?;
-    // rstr.push_str(&code);
-    rstr.push_str(":done");
-    Ok(rstr)
-}
-
 // ------------------------- resolve entry -----------------------------
 
 /// ifを表現するラベルに割り当てる名前を解決する関数
-fn resolve_if_label(proc_contents: &mut Vec<SedInstruction>, mut min_id: usize) -> usize {
+fn resolve_if_label(proc_contents: &mut Vec<SoilIRInstruction>, mut min_id: usize) -> usize {
     for j in &mut *proc_contents {
-        if let SedInstruction::IfProc(a) = j {
+        if let SoilIRInstruction::IfProc(a) = j {
             a.set_id(min_id);
             min_id += 1;
             min_id = resolve_if_label(&mut a.then_proc, min_id);
@@ -867,38 +889,6 @@ fn resolve_if_label(proc_contents: &mut Vec<SedInstruction>, mut min_id: usize) 
 struct ConsumedTable {
     func_label_id: usize,
     if_id: usize,
-}
-
-/// return addrの決定
-/// 関数を集めて、
-/// return アドレス(ラベル)、
-/// 関数のラベルも解決する
-fn assemble_funcs(func_table: &mut [FuncDef]) -> ConsumedTable {
-    let mut pad = 0;
-    let mut label_id = 0;
-    for i in &mut *func_table {
-        pad += i.set_return_addr_offset(pad);
-
-        i.id = label_id;
-        label_id += 1;
-    }
-
-    // ローカル変数の解決
-    for i in &mut *func_table {
-        i.proc_contents.set_localc(i.localc + i.argc);
-    }
-
-    // ifスコープのラベル解決
-    let mut if_min_id = 0;
-
-    for i in &mut *func_table {
-        if_min_id = resolve_if_label(&mut i.proc_contents, if_min_id);
-    }
-
-    ConsumedTable {
-        func_label_id: pad,
-        if_id: if_min_id,
-    }
 }
 
 #[cfg(test)]
@@ -920,17 +910,17 @@ mod code_gen_test {
         let func_ends_with_zero = em_ends_with_zero();
 
         entry.set_proc_contents(vec![
-            SedInstruction::Sed(SedCode("s/.*/~init~init/".to_string())), //ローカル変数の初期化
-            SedInstruction::ConstVal(ConstVal::new("101101110")),
-            SedInstruction::Set(Value::Local(0)),
-            SedInstruction::ConstVal(ConstVal::new("11101110111")),
-            SedInstruction::Set(Value::Local(1)),
-            SedInstruction::Val(Value::Local(0)), // L0
-            SedInstruction::Val(Value::Local(1)), // L0
-            SedInstruction::Call(CallFunc::new("mul")),
-            SedInstruction::Set(Value::Local(0)),
-            SedInstruction::Val(Value::Local(0)),
-            SedInstruction::Ret,
+            SoilIRInstruction::Sed(SedCode("s/.*/~init~init/".to_string())), //ローカル変数の初期化
+            SoilIRInstruction::ConstVal(ConstVal::new("101101110")),
+            SoilIRInstruction::Set(Value::Local(0)),
+            SoilIRInstruction::ConstVal(ConstVal::new("11101110111")),
+            SoilIRInstruction::Set(Value::Local(1)),
+            SoilIRInstruction::Val(Value::Local(0)), // L0
+            SoilIRInstruction::Val(Value::Local(1)), // L0
+            SoilIRInstruction::Call(CallFunc::new("mul")),
+            SoilIRInstruction::Set(Value::Local(0)),
+            SoilIRInstruction::Val(Value::Local(0)),
+            SoilIRInstruction::Ret,
         ]);
 
         let func_def_table = vec![

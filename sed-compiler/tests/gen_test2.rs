@@ -48,17 +48,17 @@ fn gen_test_proc00() -> String {
     let func_ends_with_zero = em_ends_with_zero();
 
     entry.set_proc_contents(vec![
-        SedInstruction::Sed(SedCode("s/.*/~init~init/".to_string())), //ローカル変数の初期化
-        SedInstruction::ConstVal(ConstVal::new("101101110")),
-        SedInstruction::Set(Value::Local(0)),
-        SedInstruction::ConstVal(ConstVal::new("11101110111")),
-        SedInstruction::Set(Value::Local(1)),
-        SedInstruction::Val(Value::Local(0)), // L0
-        SedInstruction::Val(Value::Local(1)), // L0
-        SedInstruction::Call(CallFunc::new("mul")),
-        SedInstruction::Set(Value::Local(0)),
-        SedInstruction::Val(Value::Local(0)),
-        SedInstruction::Ret,
+        SoilIRInstruction::Sed(SedCode("s/.*/~init~init/".to_string())), //ローカル変数の初期化
+        SoilIRInstruction::ConstVal(ConstVal::new("101101110")),
+        SoilIRInstruction::Set(Value::Local(0)),
+        SoilIRInstruction::ConstVal(ConstVal::new("11101110111")),
+        SoilIRInstruction::Set(Value::Local(1)),
+        SoilIRInstruction::Val(Value::Local(0)), // L0
+        SoilIRInstruction::Val(Value::Local(1)), // L0
+        SoilIRInstruction::Call(CallFunc::new("mul")),
+        SoilIRInstruction::Set(Value::Local(0)),
+        SoilIRInstruction::Val(Value::Local(0)),
+        SoilIRInstruction::Ret,
     ]);
 
     let compile_result = CompilerBuilder::new()
@@ -89,26 +89,26 @@ fn gen_test_proc01() -> String {
     let mut func_sub32 = em_sub32();
 
     entry.set_proc_contents(vec![
-        SedInstruction::Sed(SedCode("s/.*/~init~init/".to_string())), //ローカル変数の初期化
-        SedInstruction::ConstVal(ConstVal::new("10011011010111111")),
-        SedInstruction::Set(Value::Local(0)),
-        SedInstruction::ConstVal(ConstVal::new("11101101")),
-        SedInstruction::Set(Value::Local(1)),
-        SedInstruction::Val(Value::Local(0)), // L0
-        SedInstruction::Val(Value::Local(1)), // L0
-        SedInstruction::Call(CallFunc::new("sub32")),
-        SedInstruction::Ret,
+        SoilIRInstruction::Sed(SedCode("s/.*/~init~init/".to_string())), //ローカル変数の初期化
+        SoilIRInstruction::ConstVal(ConstVal::new("10011011010111111")),
+        SoilIRInstruction::Set(Value::Local(0)),
+        SoilIRInstruction::ConstVal(ConstVal::new("11101101")),
+        SoilIRInstruction::Set(Value::Local(1)),
+        SoilIRInstruction::Val(Value::Local(0)), // L0
+        SoilIRInstruction::Val(Value::Local(1)), // L0
+        SoilIRInstruction::Call(CallFunc::new("sub32")),
+        SoilIRInstruction::Ret,
     ]);
 
     func_sub32.set_proc_contents(vec![
-        SedInstruction::Val(Value::Arg(0)),
-        SedInstruction::Call(CallFunc::new("zero_padding32")),
-        SedInstruction::Val(Value::Arg(1)),
-        SedInstruction::Call(CallFunc::new("zero_padding32")),
-        SedInstruction::Call(CallFunc::new("twos_complement")),
-        SedInstruction::Call(CallFunc::new("add")),
-        SedInstruction::Call(CallFunc::new("zero_padding32")),
-        SedInstruction::Ret,
+        SoilIRInstruction::Val(Value::Arg(0)),
+        SoilIRInstruction::Call(CallFunc::new("zero_padding32")),
+        SoilIRInstruction::Val(Value::Arg(1)),
+        SoilIRInstruction::Call(CallFunc::new("zero_padding32")),
+        SoilIRInstruction::Call(CallFunc::new("twos_complement")),
+        SoilIRInstruction::Call(CallFunc::new("add")),
+        SoilIRInstruction::Call(CallFunc::new("zero_padding32")),
+        SoilIRInstruction::Ret,
     ]);
 
     let compile_result = CompilerBuilder::new()

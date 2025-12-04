@@ -8,7 +8,15 @@ example source
 
 [soil src](sed-compiler/soil/basic_operations.soil) -> [out sed](sed-compiler/sed/basic_operations.sed)
 
-# Soil
+# Soilc
+
+soilc is a sed-compiler command line interface tool.
+
+```sh
+cargo run -p soilc -- -i soil_sample/basic.soil
+# 
+echo ~00000111010110111100110100010101~00111010110111100110100010110001 | sed -f out.sed
+```
 
 # Run Sed Program
 

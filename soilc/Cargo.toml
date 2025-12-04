@@ -2,8 +2,12 @@
 name = "soilc"
 version = "0.1.0"
 edition = "2024"
+authors = ["Muranaka Tomonari <tom.ipynb@gmail.com>"]
 license = "MIT"
+
+description = "sed compiler CLI"
+repository = "https://github.com/Tom-game-project/sed-compiler"
 
 [dependencies]
 clap = { version="4.5.53", features = ["derive"] }
-sed-compiler = { path="../sed-compiler" }
+sed-compiler = { path="../sed-compiler", version="0.1.0" }

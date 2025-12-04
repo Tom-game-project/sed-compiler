@@ -4,6 +4,10 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 
+authors = ["Muranaka Tomonari <tom.ipynb@gmail.com>"]
+
+description = "sed compiler CLI"
+repository = "https://github.com/Tom-game-project/sed-compiler"
 [dependencies]
 chumsky = "0.11.1"
 ariadne = "0.5"
