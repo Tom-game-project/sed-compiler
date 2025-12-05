@@ -871,10 +871,13 @@ fn sedgen_func_def(
         let args_out = "\\1";
         let locals_out = (0..func_def.localc).map(|_| "~init").collect::<String>();
         format!(
-            ":{}\n
+            "
+# def {}
+:{}\n
 s/:retlabel[0-9]\\+{}[^\\|]*|$/{}{}/
 s/\\n\\(.*\\)/\\1/
 ",
+            func_def.name,
             func_def.get_funclabel(),
             pattern,
             args_out,
