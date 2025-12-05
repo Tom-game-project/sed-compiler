@@ -1,6 +1,7 @@
-# Sed Compiler
-
-sed as a runtime.
+<div align="center">
+    <h1><code>Sed Compiler</code></h1>
+    <p><strong>sed as a runtime</strong></p>
+</div>
 
 You can transpilate the custom languages "Soil" to sed.
 

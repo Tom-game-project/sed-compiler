@@ -213,7 +213,7 @@ pub fn entry a:bit32, b:bit32 -> bit32, bit32, bit32 {
     let r1 = 0;
     let r2 = 0;
 
-    r1 = gcd(b, a);
+    // r1 = gcd(b, a);
     r2 = gcd(a, b);
 
     return 0, r1, r2;

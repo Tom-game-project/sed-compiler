@@ -1,9 +1,37 @@
 /// code_gen.rs 
-///
-/// code_genにおいて、内部の中間表現(IR)はwasmやforthのようなスタック指向のランタイムのように設計しています。
+/// 
+/// -- ja --
+/// code_genにおいて、内部の中間表現(IR)はwasmやforthのようなスタック指向のランタイムのように記述できます。
 /// 具体的にはSoilIR構造体がその役割を果たします。
 /// 関数や条件分岐にはsedのラベルを使います。ラベルの重複を防ぐために、IRのツリーを再帰的に探索して解決します。
-/// 具体的にはCompilerBuilder<Unassembled>のassembleが諸々の解決をします。
+/// 具体的には`CompilerBuilder<Unassembled>::assemble`が諸々の解決をします。
+/// -- en --
+/// In the code generation phase, the internal IR is modeled after a stack-oriented runtime like WebAssembly or Forth.
+/// Specifically, the `SoilIR` struct fulfills this role.
+///
+/// `sed` labels are used for functions and conditional branches. To prevent label collisions, the IR tree is traversed recursively to resolve them.
+/// This resolution is specifically handled by `CompilerBuilder<Unassembled>::assemble`.
+///
+/// ## Structure of the Generated Sed Script
+/// ```txt
+/// +--------------------------+
+/// | entry function section   |
+/// | junp to :done            |
+/// +--------------------------+
+/// | def func0                |
+/// | -(return addr resolver)- |
+/// +--------------------------+
+/// | def func1                |
+/// | -(return addr resolver)- |
+/// +--------------------------+
+/// | def func2                |
+/// | -(return addr resolver)- |
+/// +--------------------------+
+///             :
+/// |           :              |
+/// +---------:done------------+
+/// :done
+/// ```
 ///
 
 use std::collections::BTreeMap;
@@ -41,25 +69,23 @@ impl CompilerBuilder<Unassembled> {
         }
     }
 
-    /// 関数定義を一つ追加する
+    /// add function definition
     pub fn add_func(mut self, func: FuncDef) -> Self {
         self.func_table.push(func);
         self
     }
 
-    /// ID割り当て、オフセット計算、ラベル解決などを行う
-    /// 状態を Assembled に遷移させる
+    /// resolve and setting SoilIR status.
+    /// then this function returns "Assembled" CompilerBuilder.
     pub fn assemble(mut self) -> CompilerBuilder<Assembled> {
-        // entry pointをリストの先頭に配置する
+        // "entry" is a special entry function.
+        // move the "entry" function to the top of the functions list.
         if let Some(elem) = self.func_table.pop_if(|a| a.name == "entry") {
             self.func_table.insert(0, elem);
         }
-        // ID割り当て、オフセット計算、ラベル解決など
-        
-        // return addrの決定
-        // 関数を集めて、
-        // return アドレス(ラベル)、
-        // 関数のラベルも解決する
+
+        // resolve return addr
+        // Assign an unique id to the function
         let mut pad = 0;
         let mut label_id = 0;
         for i in &mut *self.func_table {
@@ -69,12 +95,12 @@ impl CompilerBuilder<Unassembled> {
             label_id += 1;
         }
 
-        // ローカル変数の解決
+        // resolve local variables
         for i in &mut *self.func_table {
             i.proc_contents.set_localc(i.localc + i.argc);
         }
 
-        // ifスコープのラベル解決
+        // resolve if scope labels
         let mut if_min_id = 0;
 
         for i in &mut *self.func_table {
@@ -94,27 +120,30 @@ impl CompilerBuilder<Unassembled> {
     }
 }
 
-// この型はすでにassembleを実行している状態のビルダー
 impl CompilerBuilder<Assembled> {
-    /// sedコードを生成する
-    pub fn generate(self) -> Result<String, CompileErr> {
+    /// generate sed script
+    pub fn generate(&self) -> Result<String, CompileErr> {
         let mut rstr = "".to_string();
-        let tree = create_return_dispatcher_btree_map(&self.func_table)?;
+        let call_tree = 
+            create_return_dispatcher_btree_map(&self.func_table)?;
         for i in &self.func_table {
-            let code = sedgen_func_def(i, &self.func_table, &tree)?;
+            let code = sedgen_func_def(i, &self.func_table, &call_tree)?;
             rstr.push_str(&code);
         }
         rstr.push_str(":done");
         Ok(rstr)
     }
 
-    /// TODO: debug用関数　後で消す
+    /// show IR table
     pub fn resolved_show_table(&self) {
         println!("{:#?}", self.func_table);
     }
 }
 
-/// この関数を使ってreturnアドレスを保存する
+/// This structure is stored in `return_addr`.
+///
+/// `ReturnAddrMarker` represents the address to which the function will return.
+/// It holds a unique identifier.
 #[derive(Debug)]
 struct ReturnAddrMarker(usize);
 impl ReturnAddrMarker {
@@ -130,7 +159,6 @@ impl ReturnAddrMarker {
 #[derive(Debug)]
 pub struct SedCode(pub String);
 
-/// 
 #[derive(Debug)]
 struct SoilIR(Vec<SoilIRInstruction>);
 
@@ -148,21 +176,25 @@ impl DerefMut for SoilIR {
     }
 }
 
+/// Sed-Compiler Intermediate Representation(IR)
 #[derive(Debug)]
 pub enum SoilIRInstruction {
-    /// 生のSedプログラム
+    /// Raw Sed Script
     Sed(SedCode),
+    /// push Value to stack
     Val(Value),
-    /// スタックに定数を積む
+    /// push ConstVal to stack
     ConstVal(ConstVal),
-    /// 関数をよびスタックを関数の引数分消費して
-    /// 返り値をスタックに積む(返り値の個数だけスタックにpushされる)
+    /// Call the function and consume the stack by the number of function arguments for computation
+    /// Push the return value onto the stack
     Call(CallFunc),
-    /// スタックをpopしてそれをvalueにセットする
+    /// pop stack and set value
     Set(Value),
-    /// func_def.retc分スタックを消費して値を返却する
+    /// Consumes the stack by the number specified in func_def.retc and returns the value.
     Ret,
-    /// スタックのtopの値によって条件分岐
+    /// Conditional branching based on the value at the top of the stack
+    /// 0 -> else
+    /// otherwise -> then
     IfProc(IfProc),
 }
 
@@ -174,7 +206,7 @@ pub enum Value {
 
 #[derive(Debug)]
 pub struct IfProc {
-    id: usize, // ラベルを決定するために使う
+    id: usize, // unique if label
     then_proc: SoilIR,
     else_proc: SoilIR,
 }
@@ -196,6 +228,7 @@ impl IfProc {
 #[derive(Debug)]
 pub struct ArgVal {
     id: usize, // 引数の識別、同一スコープ内で重複がないように設定する
+               // A unique integer within the same scope that does not duplicate
 }
 
 impl ArgVal {
@@ -207,6 +240,7 @@ impl ArgVal {
 #[derive(Debug)]
 pub struct LocalVal {
     id: usize, // 引数の識別、同一スコープ内で重複がないように設定する
+               // A unique integer within the same scope that does not duplicate
 }
 impl LocalVal {
     pub fn new(id: usize) -> Self {
@@ -230,9 +264,9 @@ impl ConstVal {
 pub struct FuncDef {
     name: String, // function name
     id: usize,
-    argc: usize,   // 引数の個数
-    localc: usize, // ローカル変数の個数
-    retc: usize,   // 返り値の個数
+    argc: usize,   // the number of arguments
+    localc: usize, // the number of local variables
+    retc: usize,   // the number of return variables
     return_addr_offset: ReturnAddrMarker,
     proc_contents: SoilIR,
     arg_list: Vec<ArgVal>,
@@ -255,6 +289,7 @@ impl FuncDef {
     }
 
     /// 関数の内容がセットされ、更に,callにはreturn_addr_markerが0から1ずつインクリメントして設定される
+    /// setting function contents.
     pub fn set_proc_contents(&mut self, proc_contents: Vec<SoilIRInstruction>) -> usize {
         self.proc_contents = SoilIR(proc_contents);
         self.setup_proc_contents(0)
@@ -267,12 +302,10 @@ impl FuncDef {
 
 #[derive(Debug)]
 pub struct CallFunc {
-    // 何を呼ぶか
-    // return addr
     func_name: String,
     /// 呼び出しもとのローカル変数の個数
     /// 関数の引数とローカル変数を足したもの
-    localc: usize,
+    localc: usize, // 
     return_addr_marker: ReturnAddrMarker,
 }
 
@@ -295,18 +328,21 @@ pub enum CompileErr {
 }
 
 // =========================================================================================
-//                                 ここから 共通実装
+//                                      traits
 // =========================================================================================
 
-/// returnアドレス解決のためのトレイト
+// returnアドレス解決のためのトレイト
+/// the trait for resolving return address
 trait ReturnAddrOffsetResolver {
-    /// 中間表現SoilIRが設定された直後にリターンアドレスをセットします。
-    ///
-    /// 関数の内部実装でcallが使われている部分を0からのカウントしナンバリングします。
+    // 中間表現SoilIRが設定された直後にリターンアドレスをセットします。
+    // 関数の内部実装でcallが使われている部分を0からカウントしナンバリングします。
+    /// Assigns return addresses right after the SoilIR is generated.
+    /// Each `call` instruction in the function is assigned a sequential index, starting from `counter`.
     fn setup_proc_contents(&mut self, counter: usize) -> usize;
-    /// 実行可能なプログラムを生成する前に、リターンアドレスの解決をします
-    ///
-    /// 他の関数と
+    // 実行可能なプログラムを生成するために、リターンアドレスの解決をします
+    // この関数を呼び出すとすべての関数呼び出しが連番になり、数字の重複がなくなります。
+    /// Resolves return addresses for executable generation.
+    /// After calling this, all function calls are sequentially indexed with no overlap.
     fn set_return_addr_offset(&mut self, offset: usize) -> usize;
 }
 
@@ -361,7 +397,10 @@ impl ReturnAddrOffsetResolver for IfProc {
     }
 }
 
-/// 関数ごとに、帰るべき命令列上のアドレスは絞れるので、それらの紹介用ディクショナリを返す
+/// Returns a map organized as follows:
+///
+/// * **Key**: Function name (`String`)
+/// * **Value**: List of call sites (`Vec<ReturnAddrResolveCode>`)
 fn create_return_dispatcher_btree_map(
     func_table: &[FuncDef],
 ) -> Result<BTreeMap<String, Vec<ReturnAddrResolveCode>>, CompileErr> {
@@ -380,8 +419,14 @@ fn create_return_dispatcher_btree_map(
     Ok(rdic)
 }
 
-/// return dispatcherコードの生成
-/// プログラムの呼び出し元を判明させる
+/// ```txt
+/// |            :             |
+/// +--------------------------+
+/// | def funcn                |
+/// | -(return addr resolver)- | <- this is the trait for generating `return addr resolver`
+/// +--------------------------+
+/// |            :             |
+/// ```
 trait SedgenReturnDispatcher {
     fn sedgen_return_dispatcher(
         &self,
@@ -427,7 +472,10 @@ impl SedgenReturnDispatcher for CallFunc {
             // pattern
             rstr.push_str(&format!("s/.*\\n:{}", retlabel));
             rstr.push_str(&"~[^\\~]*".repeat(func_def.argc));
+            // -- ja --
             // 呼び出し元のローカル変数を復元する
+            // -- en --
+            // restore the caller's local variables
             if 0 < self.localc {
                 rstr.push_str(&format!(
                     "\\({}{}\\)",
@@ -484,7 +532,6 @@ impl SetLocalc for SoilIR {
 impl SetLocalc for CallFunc {
     /// この関数を呼び出しているスコープにおいて
     /// どれだけのローカル変数が使用されているかをセットする
-    /// 主にassemble_funcs
     fn set_localc(&mut self, localc: usize) {
         self.localc = localc
     }
@@ -500,7 +547,7 @@ impl SetLocalc for IfProc {
 
 /// |... ArgVal ...|... LocalVal...|[... stack zone ...]
 ///  <---------fixed size -------->| <--  flex size -->
-/// 返り値
+/// 
 pub trait ResolvePopAndSetProc {
     fn resolve_pop_and_set_proc(&self, stack_size: usize, func_def: &FuncDef) -> String;
 }
@@ -518,7 +565,7 @@ impl ResolvePopAndSetProc for LocalVal {
 }
 
 // =========================================================================================
-//                                 ここまで 共通実装
+//                                 trait end
 // =========================================================================================
 
 /// func_tableから名前の一致する関数を探し出す
@@ -534,15 +581,19 @@ fn find_function_definition_by_name<'a>(
 }
 
 // ------------------------- resolve instructions -----------------------------
+// resolve_*_instructions functions
+//
+// function set that build executable sed script.
 
-/// 生のsedプログラムを格納する
+/// resolve SoilIRInstruction::Sed
+/// Generates the sed script directly from SedCode.
 fn resolve_sed_instruction(rstr: &mut String, sed: &SedCode, stack_size: usize) -> usize {
     rstr.push_str(&format!("{}\n", sed.0));
     stack_size
 }
 
-/// 関数の呼び出し。
-/// スタックトップから引数の個数分消費し、返り値分を積む
+/// resolve SoilIRInstruction::Call
+/// Appends the sed script equivalent to a function call to `rstr` and returns the stack size.
 fn resolve_call_instruction(
     rstr: &mut String,
     func_call: &CallFunc,
@@ -573,13 +624,13 @@ fn resolve_stack_push_proc(stack_size: usize, offset: usize) -> String {
     )
 }
 
-/// 引数をスタックに積む
+/// resolve SoilIRInstruction::Val
 fn resolve_argval_instruction(rstr: &mut String, a: &ArgVal, stack_size: usize) -> usize {
     rstr.push_str(&resolve_stack_push_proc(stack_size, a.id));
     stack_size + 1
 }
 
-/// ローカル変数をスタックに積む
+/// resolve SoilIRInstruction::Val
 fn resolve_localval_instruction(
     rstr: &mut String,
     a: &LocalVal,
@@ -590,7 +641,7 @@ fn resolve_localval_instruction(
     stack_size + 1
 }
 
-/// 定数をスタックに積む
+/// resolve SoilIRInstruction::Const
 fn resolve_constval_instruction(rstr: &mut String, a: &ConstVal, mut stack_size: usize) -> usize {
     rstr.push_str(&format!(
         "s/{}/{}/\n",
@@ -604,7 +655,6 @@ fn resolve_constval_instruction(rstr: &mut String, a: &ConstVal, mut stack_size:
 fn resolve_pop_and_set_proc(stack_size: usize, offset: usize) -> String {
     format!(
         "s/{}/{}/\n",
-        //\1      \2            \3
         format!(
             "\\({}\\)~[^\\~]*\\({}\\)\\(~[^\\~]*\\)",
             "~[^\\~]*".repeat(offset),
@@ -614,8 +664,7 @@ fn resolve_pop_and_set_proc(stack_size: usize, offset: usize) -> String {
     )
 }
 
-/// スタックトップを消費してローカル変数または引数にセットする
-///
+/// resolve SoilIRInstruction::Set
 fn resolve_set_instruction(
     rstr: &mut String,
     a: &dyn ResolvePopAndSetProc,
@@ -623,9 +672,13 @@ fn resolve_set_instruction(
     fixed_offset: usize,
     mut stack_size: usize,
 ) -> Result<usize, CompileErr> {
+    // -- ja --
     // スタックの最上部を消費して、値をsetする
     // stack_sizeが
     // fixed_offsetだったらerror
+    // -- en --
+    // pop stack, and set value
+    // if stack size less than fixed_offset size, this function return error
 
     if stack_size <= fixed_offset {
         return Err(CompileErr::StackUnderFlow(format!(
@@ -638,7 +691,6 @@ fn resolve_set_instruction(
     Ok(stack_size)
 }
 
-/// 返り値`return`の処理
 fn resolve_ret_instructions(
     rstr: &mut String,
     func_def: &FuncDef,
@@ -719,10 +771,11 @@ b {endif_label}
     Ok(stack_size)
 }
 
+/// Converts the intermediate representation into a sed script and appends it to the output buffer `rstr`.
 fn resolve_instructions(
     rstr: &mut String,
     func_def: &FuncDef,
-    proc_contents: &[SoilIRInstruction], // 命令列
+    proc_contents: &[SoilIRInstruction], // IR
     fixed_offset: usize,
     mut stack_size: usize,
     func_table: &[FuncDef],
@@ -803,7 +856,7 @@ b {}
 fn sedgen_func_def(
     func_def: &FuncDef,
     func_table: &[FuncDef],
-    tree: &BTreeMap<String, Vec<ReturnAddrResolveCode>>,
+    call_tree: &BTreeMap<String, Vec<ReturnAddrResolveCode>>,
 ) -> Result<String, CompileErr> {
     let is_entry = func_def.name == "entry";
     let fixed_offset = func_def.argc + func_def.localc;
@@ -845,8 +898,7 @@ s/\\n\\(.*\\)/\\1/
         rstr.push_str(&format!(":{}\n", return_label));
         rstr.push_str("b done\n"); // entry return
     } else {
-        // TODO リターンdispatcherに巨大なマッチ文を書くのではなく、それぞれの関数が解決する方針について考える
-        // rstr.push_str("b return_dispatcher\n"); // 最後は必ずreturn
+        // return addr resolve logic
         let return_label = format!("return{}", func_def.id);
         rstr.push_str(&format!(
             "
@@ -860,7 +912,7 @@ s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\2/
 ",
             return_label
         ));
-        if let Some(codes) = tree.get(&func_def.name) {
+        if let Some(codes) = call_tree.get(&func_def.name) {
             for return_addr_resolve_code in codes {
                 rstr.push_str(&return_addr_resolve_code.code);
             }
@@ -871,9 +923,8 @@ s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\2/
     Ok(rstr)
 }
 
-// ------------------------- resolve entry -----------------------------
-
-/// ifを表現するラベルに割り当てる名前を解決する関数
+// ifを表現するラベルに割り当てる名前を解決する関数
+/// resolve if label name
 fn resolve_if_label(proc_contents: &mut Vec<SoilIRInstruction>, mut min_id: usize) -> usize {
     for j in &mut *proc_contents {
         if let SoilIRInstruction::IfProc(a) = j {
