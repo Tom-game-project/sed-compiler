@@ -1,0 +1,73 @@
+//```py
+//def decimal_to_padding(a: decimal) -> decimal:
+//    return a * "p"
+//```
+fn decimal_to_padding a:decimal -> str {
+    sed ${
+         "s/~\\([^\\~]*\\)/\\1;9876543210pppppppppp/",
+         "s/\\([0-9]\\);.*\\1\\(.*\\)/\\2/",
+         "s/..........\\(.*\\)/~\\1;/",
+    }$
+}
+
+//```py
+//def lenx10(a: str) -> str:
+//    return a * 10
+//```
+fn lenx10 a:str -> str {
+    sed ${
+        "s/~\\([^\\~]*\\)/~\\1\\1\\1\\1\\1\\1\\1\\1\\1\\1;/",
+    }$
+}
+
+//```py
+//def decimal_add_one (a: decimal) -> decimal:
+//    if a == 8:
+//        return 0;
+//    else:
+//        return a + 1
+//```
+fn decimal_add_one a: decimal -> decimal {
+    sed ${
+        "s/~\\([^\\~]*\\)/\\1;0123456780/",
+        "s/\\([0-9]\\);.*\\1\\(.\\).*/~\\2;/",
+    }$
+}
+
+//```py
+//def decimal_mod3 (a: decimal) -> decimal:
+//    return a%3
+//```
+fn decimal_mod3 a:decimal -> decimal {
+    sed ${
+         "s/~\\([^\\~]*\\)/\\1;9876543210:10210210210/",
+         "s/^\\([0-9]\\);.*\\1\\(.*\\):/\\2/",
+         "s/^..........\\(.\\).*$/~\\1;/",
+    }$
+}
+
+//```py
+//def decimal_div3 (a: decimal) -> decimal:
+//    return a//3
+//```
+fn decimal_div3 a:decimal -> decimal {
+    sed ${
+         "s/~\\([^\\~]*\\)/\\1;9876543210:33222111000/",
+         "s/^\\([0-9]\\);.*\\1\\(.*\\):/\\2/",
+         "s/^..........\\(.\\).*$/~\\1;/",
+    }$
+}
+
+pub fn entry a:decimal -> decimal {
+    let r1 = "hello";
+    let r2 = " world";
+
+    // r2 = join(r1, r2);
+    // r2 = decimal_to_padding(a);
+    // r2 = lenx10(r2);
+    // r2 = decimal_add_one(a);
+    r2 = decimal_mod3(a);
+
+    return r2;
+}
+
