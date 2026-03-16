@@ -99,10 +99,17 @@ fn decimal_div3 a:decimal -> decimal {
     }$
 }
 
+fn decimal_conv3 a:decimal -> decimal {
+    sed ${
+         "s/~\\([^\\~]*\\)/\\1;9876543210:EE999666333/",
+         "s/^\\([0-9]\\);.*\\1\\(.*\\):/\\2/",
+         "s/^..........\\(.\\).*$/~\\1;/",
+    }$
+}
+
 // ------------------------------------------------------------------------------
 // =                                get function                                =
 // ------------------------------------------------------------------------------
-
 
 fn get_row_helper a:map9x9 -> array9 {
     sed ${
@@ -131,11 +138,13 @@ fn get_square_helper a:map9x9 -> array9 {
     }$
 }
 
-// (9 - a) * "p"
-// 
 fn get_square map: map9x9, x: decimal, y: decimal -> array9 {
     return get_square_helper(
-        concat(concat(lenx9(decimal_to_padding_r(y)), lenx3(decimal_to_padding_r(x))), map)
+        concat(concat(lenx9(decimal_to_padding_r(
+            decimal_conv3(y)
+        )), lenx3(decimal_to_padding_r(
+            decimal_div3(x)
+        ))), map)
     );
 }
 
