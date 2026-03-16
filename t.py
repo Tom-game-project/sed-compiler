@@ -20,6 +20,9 @@ def divide_and_3x3(lst:list[str]) -> list[str]:
                 grid[block_row + i][block_col + j] = word[i * 3 + j]
     return list(map(lambda a: "".join(a), grid))
 
+# def normal(lst:list[str]) -> lst:list[str]:
+#     return 
+
 word9_lst = [
     "Adventure",
     "Beautiful",
@@ -41,3 +44,5 @@ for word in divide_and_3x3(word9_lst):
 
 # print("".join(rotate90(word9_lst)))
 print("".join(divide_and_3x3(word9_lst)))
+
+print("".join(word9_lst))
