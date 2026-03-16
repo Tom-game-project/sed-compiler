@@ -1,3 +1,9 @@
+fn concat a:str, b:str -> str {
+    sed ${
+        "s/~\\(.*\\)~\\(.*\\)/~\\1\\2;/",
+    }$
+}
+
 //```py
 //def decimal_to_padding(a: decimal) -> decimal:
 //    return a * "p"
@@ -11,12 +17,24 @@ fn decimal_to_padding a:decimal -> str {
 }
 
 //```py
-//def lenx10(a: str) -> str:
-//    return a * 10
+//def decimal_to_padding_r(a: decimal) -> decimal:
+//    return (9 - a) * "p"
 //```
-fn lenx10 a:str -> str {
+fn decimal_to_padding_r a:decimal -> str {
     sed ${
-        "s/~\\([^\\~]*\\)/~\\1\\1\\1\\1\\1\\1\\1\\1\\1\\1;/",
+         "s/~\\([^\\~]*\\)/\\1;0123456789pppppppppp/",
+         "s/\\([0-9]\\);.*\\1\\(.*\\)/\\2/",
+         "s/..........\\(.*\\)/~\\1;/",
+    }$
+}
+
+//```py
+//def lenx9(a: str) -> str:
+//    return a * 9
+//```
+fn lenx9 a:str -> str {
+    sed ${
+        "s/~\\([^\\~]*\\)/~\\1\\1\\1\\1\\1\\1\\1\\1\\1;/",
     }$
 }
 
@@ -58,16 +76,41 @@ fn decimal_div3 a:decimal -> decimal {
     }$
 }
 
-pub fn entry a:decimal -> decimal {
+fn load_map81 a:map9x9 -> array9 {
+    sed ${
+        "s/~\\([^\\~]*\\)/\\1/",
+        "s/.................................................................................\\(.........\\).*/~\\1;/",
+    }$
+}
+
+// "\\(.........\\).*"
+// fn get_row map: map9x9, y: decimal -> array9 {
+//     sed ${
+//         "s/~\\([^\\~]*\\)~\\([^\\~]*\\)/\\1\\2/",
+//     }$
+// }
+
+fn get_column_helper map: map9x9 -> array9 {
+    sed ${
+        "s/~.........\\(.\\)........\\(.\\)........\\(.\\)........\\(.\\)........\\(.\\)........\\(.\\)........\\(.\\)........\\(.\\)........\\(.\\).*/~\\1\\2\\3\\4\\5\\6\\7\\8\\9;/",
+    }$
+}
+
+fn get_column map: map9x9, x: decimal -> array9 {
+    return get_column_helper(concat(decimal_to_padding_r(x), map));
+    // return concat(decimal_to_padding_r(x), map);
+}
+
+// // "^\\(...\\)......\\(...\\)......\\(...\\).*"
+// fn get_square map: map9x9, x: decimal, y: decimal -> array9 {
+// 
+// }
+
+pub fn entry m: map9x9, a:decimal -> decimal {
     let r1 = "hello";
     let r2 = " world";
 
-    // r2 = join(r1, r2);
-    // r2 = decimal_to_padding(a);
-    // r2 = lenx10(r2);
-    // r2 = decimal_add_one(a);
-    r2 = decimal_mod3(a);
-
+    r2 = get_column(m, a);
     return r2;
 }
 
