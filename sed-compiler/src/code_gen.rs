@@ -176,7 +176,15 @@ impl DerefMut for SoilIR {
     }
 }
 
-/// Sed-Compiler Intermediate Representation(IR)
+/// Sed-Compiler Intermediate Representation (IR)
+///
+/// TODO
+///
+/// experimental instructions implementation plan
+///
+/// - declare valiables with initation
+///
+/// - `tee` instructions (set and then get)
 #[derive(Debug)]
 pub enum SoilIRInstruction {
     /// Raw Sed Script
@@ -920,7 +928,9 @@ s/^\\(.*\\)\\(\\n:retlabel[0-9]\\+[^|]*|.*\\)$/\\2/
                 rstr.push_str(&return_addr_resolve_code.code);
             }
         } else {
-            return Err(CompileErr::Fatal);
+            // println!("codes: {}", func_def.name);
+            // return Err(CompileErr::Fatal);
+            // unused function
         }
     }
     Ok(rstr)
@@ -953,6 +963,7 @@ mod code_gen_test {
             em_add, em_ends_with_zero, em_is_empty, em_mul, em_shift_left1, em_shift_right1,
         },
     };
+
     #[test]
     fn create_return_dispatcher_btree_map_test00() {
         let mut entry = FuncDef::new("entry", 0, 2, 1);

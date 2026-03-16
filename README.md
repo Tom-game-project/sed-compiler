@@ -9,19 +9,26 @@ example source
 
 [soil src](sed-compiler/soil/basic_operations.soil) -> [out sed](sed-compiler/sed/basic_operations.sed)
 
+# sed-compiler
+
+[Design details](sed-compiler/README.md)
+
 # Soilc
 
 soilc is a sed-compiler command line interface tool.
 
+## Compile and Run
+
 ```sh
+# Compile
 cargo run -p soilc -- -i soil_sample/basic.soil
-# 
+# Run
 echo ~00000111010110111100110100010101~00111010110111100110100010110001 | sed -f out.sed
 ```
 
 # Run Sed Program
 
-[sed-compiler/soil/basic_operations.soil](sed-compiler/soil/basic_operations.soil)
+[soil_sample](soil_sample/basic.soil)
 
 ```
 ...
@@ -48,7 +55,6 @@ echo ~00000111010110111100110100010101~00111010110111100110100010110001 | sed -f
 # There is a slight lag before the result is displayed.
 
 ```
-
 
 ```sh
 touch in

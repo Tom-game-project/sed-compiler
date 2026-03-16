@@ -287,6 +287,7 @@ fn expr_parser<'tokens, 'src: 'tokens, I>()
     recursive(|expr|{
         let int = select! { Token::I32(i) => Expr::Value(Value::Int32(i))};
         let ident = select! { Token::Ident(i) => Expr::Local(i) };
+        let string = select! { Token::Str(i) => Expr::Value(Value::Str(i)) };
 
         let items = expr
                 .clone()
@@ -299,7 +300,8 @@ fn expr_parser<'tokens, 'src: 'tokens, I>()
             .or(
                 expr.delimited_by(just(Token::Ctrl('(')), just(Token::Ctrl(')')))
             )
-            .or(ident.map_with(|a, e| (a, e.span())));
+            .or(ident.map_with(|a, e| (a, e.span())))
+            .or(string.map_with(|a, e| (a, e.span())));
 
         let call = 
             atom

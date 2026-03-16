@@ -121,7 +121,7 @@ pub enum SoilIRInstruction {
 }
 ```
 
-#### ConstVal
+### ConstVal
 
 The ConstVal instructions are used to declare numbers.
 
@@ -132,7 +132,7 @@ SoilIRInstruction::Call(CallFunc::new("shift_right1")),
 
 [Wasm const](https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/Numeric/const)
 
-#### Val
+### Val
 
 The Val instruction loads the value of a local variable (or argument) onto the stack.
 
@@ -148,7 +148,7 @@ SoilIRInstruction::Call(CallFunc::new("shift_right1")),
 
 [Wasm local.get](https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/Variables/local.get)
 
-#### Set
+### Set
 
 The Set instruction loads the 
 
@@ -159,7 +159,7 @@ SoilIRInstruction::Set(Value::Local(0)),                 // store the data "1011
 
 [Wasm set](https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/Variables/local.set)
 
-#### Call
+### Call
 
 Consumes the top $N$ items from the stack (where $N$ is the number of arguments) and pushes the result.
 
@@ -171,7 +171,7 @@ SoilIRInstruction::Call(CallFunc::new("mul")), // consume the top of the stack a
 
 [Wasm call](https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/Control_flow/call)
 
-#### IfProc
+### IfProc
 
 ```rust
 SoilIRInstruction::IfProc(IfProc::new(
@@ -187,4 +187,14 @@ SoilIRInstruction::IfProc(IfProc::new(
 ```
 
 [Wasm if..else](https://developer.mozilla.org/en-US/docs/WebAssembly/Reference/Control_flow/if...else)
+
+## TODO
+
+- impl experimental instructions
+
+- comptime
+
+- show infomation about how to take argument to the program
+
+- optimize leaf function
 
