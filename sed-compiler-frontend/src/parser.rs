@@ -176,8 +176,7 @@ fn lexer<'src>()
             "sed" => Token::Sed,
             "return" => Token::Return,
             _ => Token::Ident(ident),
-        })
-        .labelled("ident");
+        });
 
     let token = 
         string
@@ -191,9 +190,9 @@ fn lexer<'src>()
                 just(':').to(Token::Colon).labelled("Colon"),
                 just(';').to(Token::SemiColon).labelled("SemiColon"),
                 just(',').to(Token::Comma).labelled("Comma"),
+                ident.labelled("ident")
             ))
-        )
-        .or(ident);
+        );
 
     let comment = just("//")
         .then(any().and_is(just('\n').not()).repeated())

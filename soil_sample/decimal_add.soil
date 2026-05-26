@@ -131,7 +131,6 @@ fn get_column map: map9x9, x: decimal -> array9 {
     return get_column_helper(concat(decimal_to_padding_r(x), map));
 }
 
-// "^\\(...\\)......\\(...\\)......\\(...\\).*"
 fn get_square_helper a:map9x9 -> array9 {
     sed ${
         "s/~.................................................................................\\(...\\)......\\(...\\)......\\(...\\).*/~\\1\\2\\3;/"
@@ -148,11 +147,11 @@ fn get_square map: map9x9, x: decimal, y: decimal -> array9 {
     );
 }
 
-pub fn entry m: map9x9, x:decimal, y: decimal -> decimal {
-    // return get_column(m, a);
-    // return get_row(m, a);
-    // return get_square(m, x, y);
+// ------------------------------------------------------------------------------
+// =                                entry point                                 =
+// ------------------------------------------------------------------------------
 
-    return get_square(m, x, y);
+pub fn entry m: map9x9, x:decimal, y: decimal -> array9, array9, array9 {
+    return get_row(m, y), get_column(m, x), get_square(m, x, y);
 }
 

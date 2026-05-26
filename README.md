@@ -26,6 +26,17 @@ cargo run -p soilc -- -i soil_sample/basic.soil
 echo ~00000111010110111100110100010101~00111010110111100110100010110001 | sed -f out.sed
 ```
 
+
+TODO
+```
+# Compile
+cargo run -p soilc -- -i soil_sample/decimal_add.soil
+# Run
+echo ~AdvBeaChaentutilleurefulngeDifEduFurfercatnitentionureKnoMarYeswleketterdgeingday~2~2 | sed -f out.sed
+echo ~AdventureBeautifulChallengeDifferentEducationFurnitureKnowledgeMarketingYesterday~2~2 | sed -f out.sed
+
+```
+
 # Run Sed Program
 
 [soil_sample](soil_sample/basic.soil)
